@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" fill="none" viewBox="0 0 128 128" id="chat-robot">
+  <path stroke="#000" stroke-width="7" d="M16 64C16 37.4903 37.4903 16 64 16V16C90.5097 16 112 37.4903 112 64V98.2857C112 99.8778 112 100.674 111.925 101.344C111.298 106.907 106.907 111.298 101.344 111.925C100.674 112 99.8778 112 98.2857 112H64C37.4903 112 16 90.5097 16 64V64Z"></path>
+  <path stroke="#000" stroke-linecap="round" stroke-width="7" d="M58 69L58 67M73 69L73 67M65 52L65 46"></path>
+  <rect width="39" height="28" x="46" y="54" stroke="#000" stroke-width="7" rx="9"></rect>
+</svg>

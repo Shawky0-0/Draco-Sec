@@ -1,0 +1,5 @@
+{
+  "message": "mail: missing '@' or angle-addr",
+  "success": false,
+  "data": null
+}
