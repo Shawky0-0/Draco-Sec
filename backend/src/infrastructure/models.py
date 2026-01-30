@@ -68,3 +68,112 @@ class Message(Base):
     content = Column(String) # SQLite Text
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class SuricataAlert(Base):
+    __tablename__ = "suricata_alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, index=True)
+    
+    # Network Info
+    src_ip = Column(String)
+    src_port = Column(Integer, nullable=True)
+    dest_ip = Column(String)
+    dest_port = Column(Integer, nullable=True)
+    protocol = Column(String)
+    
+    # Alert Info
+    severity = Column(Integer)  # 1 (High) to 4 (Low)
+    signature = Column(String)  # The alert message
+    category = Column(String)
+    
+    # Investigation
+    action = Column(String)     # "allowed" / "blocked"
+    status = Column(String, default="new")  # "new", "investigating", "resolved", "false_positive"
+    
+    # Evidence
+    payload_printable = Column(String, nullable=True)
+    raw_event = Column(String)  # Full JSON
+    
+    # Threat Intelligence (JSON stored as string)
+    threat_intel = Column(String, nullable=True)  # IP reputation, geolocation, etc
+    mitre_techniques = Column(String, nullable=True)  # JSON array of MITRE ATT&CK techniques
+    related_alert_ids = Column(String, nullable=True)  # Comma-separated IDs
+    analyst_notes = Column(String, nullable=True)
+    enriched_at = Column(DateTime, nullable=True)  # When enrichment was added
+
+class BlockedIP(Base):
+    __tablename__ = "blocked_ips"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    ip_address = Column(String, index=True)
+    reason = Column(String)
+    blocked_at = Column(DateTime, default=datetime.utcnow)
+    active = Column(Integer, default=1)  # 1 for active, 0 for inactive (history)
+    unblocked_at = Column(DateTime, nullable=True)# Offensive Security Models
+
+class OffensiveScan(Base):
+    """Stores DracoSec penetration testing scans."""
+    __tablename__ = "offensive_scans"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True)  # FK to users table
+    target = Column(String)  # URL, IP, domain, etc.
+    methodology = Column(String)  # "Blackbox", "Whitebox", "Web Application", etc.
+    scope = Column(String)  # Detailed instructions for Strix
+    status = Column(String, default="pending")  # pending, running, completed, failed, stopped
+    
+    # Strix process info
+    strix_run_name = Column(String, nullable=True)  # Strix run directory name
+    process_id = Column(Integer, nullable=True)  # OS process ID
+    
+    # Results summary
+    vulnerabilities_found = Column(Integer, default=0)
+    critical_count = Column(Integer, default=0)
+    high_count = Column(Integer, default=0)
+    medium_count = Column(Integer, default=0)
+    low_count = Column(Integer, default=0)
+    
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class ScanMethodology(Base):
+    """Custom penetration testing methodologies created by users."""
+    __tablename__ = "scan_methodologies"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True)  # FK to users table
+    title = Column(String)
+    description = Column(String)
+    is_default = Column(Integer, default=0)  # 1 for system defaults, 0 for custom
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class Vulnerability(Base):
+    """Vulnerabilities discovered by DracoSec scans."""
+    __tablename__ = "vulnerabilities"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    scan_id = Column(Integer, index=True)  # FK to offensive_scans table
+    title = Column(String)
+    content = Column(String)  # Full vulnerability report (markdown)
+    severity = Column(String)  # critical, high, medium, low, info
+    vulnerability_type = Column(String)  # XSS, SQLi, IDOR, etc.
+    
+    # Proof of concept
+    poc = Column(String, nullable=True)  # Steps to reproduce
+    
+    found_at = Column(DateTime, default=datetime.utcnow)
+
+class AgentEvent(Base):
+    """Real-time events from DracoSec agent execution."""
+    __tablename__ = "agent_events"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    scan_id = Column(Integer, index=True)  # FK to offensive_scans table
+    agent_id = Column(String)  # Strix agent identifier
+    event_type = Column(String)  # "chat", "tool", "vulnerability", "status"
+    content = Column(String)  # Event data (JSON or text)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+
+

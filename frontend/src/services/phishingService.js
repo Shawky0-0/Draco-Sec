@@ -1,6 +1,7 @@
+import axios from 'axios';
+import API_BASE_URL from '../config/api';
 
-
-const API_URL = 'http://localhost:8000/phishing';
+const API_URL = `${API_BASE_URL}/phishing`;
 
 const getHeaders = () => {
     const token = localStorage.getItem('token');

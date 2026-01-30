@@ -9,13 +9,19 @@ import { LicensePage } from './features/auth/LicensePage';
 import { AuthPageWrapper } from './features/auth/AuthPageWrapper';
 import { PrivateRoute } from './components/layout/PrivateRoute';
 import { DashboardLayout } from './components/layout/DashboardLayout';
-import { OffensiveDashboard } from './features/dashboard/OffensiveDashboard';
 import { DefensiveDashboard } from './features/dashboard/Dashboards';
 import { ProfilePage } from './features/profile/ProfilePage';
 import PhishingPage from './features/phishing/PhishingPage';
 import { CampaignDashboard } from './features/phishing/components/CampaignDashboard';
 import { ScansPage } from './features/scans/ScansPage';
+import MonitoringPage from './features/Monitoring';
 import { DracoAIPage } from './features/ai/DracoAIPage';
+// Offensive Security Pages
+import OffensiveDashboardPage from './features/offensive/OffensiveDashboard';
+import AgentFeedList from './features/offensive/AgentFeedList';
+import AgentFeedPage from './features/offensive/AgentFeedPage';
+import BugsPage from './features/offensive/BugsPage';
+import ReportsPage from './features/offensive/ReportsPage';
 import { AnimatePresence } from 'framer-motion';
 
 const AnimatedRoutes = () => {
@@ -37,14 +43,15 @@ const AnimatedRoutes = () => {
           <Route element={<DashboardLayout />}>
             {/* Redirect root to offensive dashboard by default */}
             <Route path="/" element={<Navigate to="/offensive/dashboard" replace />} />
-            <Route path="/offensive/dashboard" element={<OffensiveDashboard />} />
+            <Route path="/offensive/dashboard" element={<OffensiveDashboardPage />} />
+            <Route path="/offensive/agent-feed" element={<AgentFeedList />} />
+            <Route path="/offensive/agent-feed/:scanId" element={<AgentFeedPage />} />
+            <Route path="/offensive/bugs" element={<BugsPage />} />
+            <Route path="/offensive/reports" element={<ReportsPage />} />
             <Route path="/defensive/phishing-campaigns/campaign/:id" element={<CampaignDashboard />} />
-            <Route path="/offensive/agent-feed" element={<div className="text-white">Agent Feed</div>} />
-            <Route path="/offensive/issues" element={<div className="text-white">Issues</div>} />
-            <Route path="/offensive/reports" element={<div className="text-white">Reports</div>} />
 
             <Route path="/defensive/dashboard" element={<DefensiveDashboard />} />
-            <Route path="/defensive/monitoring" element={<div className="text-white">Monitoring</div>} />
+            <Route path="/defensive/monitoring" element={<MonitoringPage />} />
             <Route path="/defensive/scans" element={<ScansPage />} />
             <Route path="/defensive/phishing-campaigns" element={<PhishingPage />} />
             <Route path="/draco-ai" element={<DracoAIPage />} />

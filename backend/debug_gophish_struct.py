@@ -3,7 +3,7 @@ import json
 import urllib3
 urllib3.disable_warnings()
 
-API_KEY = "c86ae4f065ef13044b29c40df996e7771c8830064d2339a55273d10e3caf949d"
+API_KEY = "98388e195593401099a1e3986bb89df3c7f06e00f062af3dbd996b08a7d338a6"
 BASE_URL = "https://127.0.0.1:3333/api"
 
 print("--- DEBUGGING /groups RESPONSE ---")

@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Plus, X, Trash2, Brain, Terminal, Shield, Sword, Menu, Copy, Edit2, Check, Square } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import API_BASE_URL from '../../config/api';
 
 // --- Markdown Formatter ---
 const FormatMessage = ({ content }) => {
@@ -45,7 +46,7 @@ export const DracoAIPage = () => {
     const [titleEditValue, setTitleEditValue] = useState('');
     const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
-    const API_URL = 'http://localhost:8000';
+    const API_URL = API_BASE_URL;
 
     // Helper to format time specifically for sidebar
     const formatRelativeTime = (dateString) => {
@@ -97,7 +98,7 @@ export const DracoAIPage = () => {
         abortControllerRef.current = controller;
 
         try {
-            const API_URL = 'http://localhost:8000';
+            const API_URL = API_BASE_URL;
             const token = localStorage.getItem('token');
             const response = await fetch(`${API_URL}/ai/chat`, {
                 method: 'POST',

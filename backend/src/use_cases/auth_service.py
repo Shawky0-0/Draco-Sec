@@ -101,3 +101,32 @@ class AuthService:
         db.refresh(user)
             
         return user
+
+    def update_profile(self, user_id: int, data: dict, db: Session) -> User:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise ValueError("User not found")
+            
+        if "first_name" in data:
+            user.first_name = data["first_name"]
+        if "last_name" in data:
+            user.last_name = data["last_name"]
+        if "email" in data:
+            # Check unique email logic could go here
+            user.email = data["email"]
+            
+        db.commit()
+        db.refresh(user)
+        return user
+
+    def change_password(self, user_id: int, old_pass: str, new_pass: str, db: Session):
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise ValueError("User not found")
+            
+        if not verify_password(old_pass, user.password_hash):
+            raise ValueError("Incorrect current password")
+            
+        user.password_hash = get_password_hash(new_pass)
+        db.commit()
+        return True

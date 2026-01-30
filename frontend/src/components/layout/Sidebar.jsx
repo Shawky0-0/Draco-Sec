@@ -30,7 +30,7 @@ export const Sidebar = () => {
     const offensiveLinks = [
         { to: "/offensive/dashboard", icon: dashboardIcon, label: "Dashboard" },
         { to: "/offensive/agent-feed", icon: liveIcon, label: "Agent Feed" },
-        { to: "/offensive/issues", icon: bugIcon, label: "Issues" },
+        { to: "/offensive/bugs", icon: bugIcon, label: "Bugs" },
         { to: "/offensive/reports", icon: documentIcon, label: "Reports" },
         { to: "/draco-ai", icon: botIcon, label: "Draco AI" },
     ];

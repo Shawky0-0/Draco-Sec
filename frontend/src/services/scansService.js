@@ -1,5 +1,7 @@
+import axios from 'axios';
+import API_BASE_URL from '../config/api';
 
-const API_URL = 'http://localhost:8000/scans';
+const API_URL = `${API_BASE_URL}/scans`;
 
 const getHeaders = (isMultipart = false) => {
     const token = localStorage.getItem('token');

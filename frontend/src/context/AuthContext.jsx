@@ -1,9 +1,10 @@
-import React, { createContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import API_BASE_URL from '../config/api';
 
 export const AuthContext = createContext(null);
 
-const API_URL = 'http://localhost:8000';
+const API_URL = API_BASE_URL;
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
@@ -82,6 +83,25 @@ export const AuthProvider = ({ children }) => {
         return response.data;
     };
 
+    const updateProfile = async (data) => {
+        const response = await axios.put(`${API_URL}/auth/me`, data);
+        const updatedPartial = response.data.user;
+        setUser(prev => {
+            const updated = { ...prev, ...updatedPartial };
+            localStorage.setItem('user', JSON.stringify(updated));
+            return updated;
+        });
+        return response.data;
+    };
+
+    const changePassword = async (oldPassword, newPassword) => {
+        const response = await axios.put(`${API_URL}/auth/password`, {
+            old_password: oldPassword,
+            new_password: newPassword
+        });
+        return response.data;
+    };
+
     const logout = () => {
         setToken(null);
         setUser(null);
@@ -98,6 +118,8 @@ export const AuthProvider = ({ children }) => {
         logout,
         signup,
         activateLicense,
+        updateProfile,
+        changePassword,
         loading
     };
 

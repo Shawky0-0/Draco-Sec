@@ -239,34 +239,251 @@ export const ProfilePage = () => {
     );
 };
 
-// Restored Settings Modal
+// Enhanced Settings Modal
 const SettingsModal = ({ onClose, user }) => {
+    const { updateProfile, changePassword } = useAuth();
+    const [activeTab, setActiveTab] = useState('general');
+    const [isLoading, setIsLoading] = useState(false);
+    const [message, setMessage] = useState({ type: '', text: '' });
+
+    // Form States
+    const [formData, setFormData] = useState({
+        first_name: user.name.split(' ')[0] || '',
+        last_name: user.name.split(' ')[1] || '',
+        email: user.email || ''
+    });
+
+    const [passData, setPassData] = useState({
+        old: '',
+        new: '',
+        confirm: ''
+    });
+
+    const handleUpdateProfile = async () => {
+        setIsLoading(true);
+        setMessage({ type: '', text: '' });
+        try {
+            await updateProfile(formData);
+            setMessage({ type: 'success', text: 'Profile updated successfully!' });
+        } catch (error) {
+            setMessage({ type: 'error', text: error.response?.data?.detail || 'Update failed. Try logging in again.' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleChangePassword = async () => {
+        if (passData.new !== passData.confirm) {
+            setMessage({ type: 'error', text: 'New passwords do not match' });
+            return;
+        }
+        if (passData.new.length < 8) {
+            setMessage({ type: 'error', text: 'Password must be at least 8 characters' });
+            return;
+        }
+        setIsLoading(true);
+        setMessage({ type: '', text: '' });
+        try {
+            await changePassword(passData.old, passData.new);
+            setMessage({ type: 'success', text: 'Password changed successfully!' });
+            setPassData({ old: '', new: '', confirm: '' });
+        } catch (error) {
+            setMessage({ type: 'error', text: error.response?.data?.detail || 'Password change failed' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="relative w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-3xl p-8 shadow-2xl">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-white">Account Settings</h2>
-                    <button onClick={onClose}><X size={20} className="text-white/50 hover:text-white" /></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-in fade-in duration-200">
+            <div className="relative w-full max-w-3xl bg-black border border-white/20 rounded-none overflow-hidden shadow-[0_0_50px_-10px_rgba(255,255,255,0.1)] flex flex-col md:flex-row h-[600px] ring-1 ring-white/10">
+
+                {/* Sidebar */}
+                <div className="w-full md:w-72 bg-neutral-950 border-b md:border-b-0 md:border-r border-white/10 p-6 flex flex-col gap-2 relative">
+                    {/* Decorative Neon Line */}
+                    <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-50" />
+
+                    {/* User Profile Summary */}
+                    <div className="flex items-center gap-4 mb-8 pb-8 border-b border-white/10 px-2">
+                        <div className="relative">
+                            <div className="w-12 h-12 rounded-full border border-white/30 bg-black flex items-center justify-center overflow-hidden shadow-[0_0_15px_rgba(255,255,255,0.15)]">
+                                {user.avatar ? (
+                                    <img src={user.avatar} className="w-full h-full object-cover grayscale" />
+                                ) : (
+                                    <span className="font-mono font-bold text-lg text-white">{user.name.charAt(0)}</span>
+                                )}
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-black" />
+                        </div>
+                        <div className="overflow-hidden">
+                            <h3 className="text-white font-bold text-sm tracking-wide truncate font-mono">{user.name}</h3>
+                            <p className="text-neutral-500 text-[10px] uppercase tracking-wider truncate">@{user.username}</p>
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={() => setActiveTab('general')}
+                        className={`flex items-center gap-3 px-4 py-3.5 text-sm font-bold tracking-wide transition-all duration-200 border-l-2 ${activeTab === 'general' ? 'bg-white/5 text-white border-white shadow-[inset_10px_0_20px_-10px_rgba(255,255,255,0.1)]' : 'border-transparent text-neutral-500 hover:text-white hover:bg-white/5'}`}
+                    >
+                        <User size={16} className={activeTab === 'general' ? 'text-white drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]' : 'text-neutral-600'} />
+                        GENERAL
+                        {activeTab === 'general' && <ChevronRight size={14} className="ml-auto opacity-100 animate-pulse" />}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('security')}
+                        className={`flex items-center gap-3 px-4 py-3.5 text-sm font-bold tracking-wide transition-all duration-200 border-l-2 ${activeTab === 'security' ? 'bg-white/5 text-white border-white shadow-[inset_10px_0_20px_-10px_rgba(255,255,255,0.1)]' : 'border-transparent text-neutral-500 hover:text-white hover:bg-white/5'}`}
+                    >
+                        <Shield size={16} className={activeTab === 'security' ? 'text-white drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]' : 'text-neutral-600'} />
+                        SECURITY
+                        {activeTab === 'security' && <ChevronRight size={14} className="ml-auto opacity-100 animate-pulse" />}
+                    </button>
+
+                    <div className="mt-auto">
+                        <button onClick={onClose} className="group w-full flex items-center justify-center gap-2 text-neutral-500 hover:text-white text-xs font-mono uppercase tracking-widest py-4 border-t border-white/10 transition-colors">
+                            <span className="group-hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)] transition-all">Close Panel</span>
+                        </button>
+                    </div>
                 </div>
 
-                <div className="space-y-4">
-                    <div className="space-y-2">
-                        <label className="text-sm text-neutral-400">Username</label>
-                        <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white" defaultValue={user.username} />
+                {/* Content Area */}
+                <div className="flex-1 bg-black flex flex-col relative overflow-hidden">
+                    {/* Header */}
+                    <div className="p-8 pb-6 border-b border-white/5">
+                        <h2 className="text-3xl font-bold text-white tracking-tighter mb-2 font-mono uppercase">
+                            {activeTab === 'general' ? '// GENERAL_INFO' : '// SECURITY_PROTOCOLS'}
+                        </h2>
+                        <div className="h-1 w-20 bg-white shadow-[0_0_10px_white]" />
                     </div>
 
-                    <div className="h-px bg-white/10 my-4" />
+                    {/* Scrollable Form Area */}
+                    <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
 
-                    <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Change Password</h3>
-                    <div className="space-y-3">
-                        <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/20" type="password" placeholder="Old Password" />
-                        <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/20" type="password" placeholder="New Password" />
-                        <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/20" type="password" placeholder="Confirm New Password" />
-                    </div>
+                        {message.text && (
+                            <motion.div
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                className={`mb-8 p-4 border-l-4 font-mono text-xs ${message.type === 'error' ? 'bg-red-950/30 border-red-500 text-red-400' : 'bg-emerald-950/30 border-emerald-500 text-emerald-400'}`}
+                            >
+                                <span className="font-bold flex items-center gap-2">
+                                    {message.type === 'error' ? '>> ERROR:' : '>> SUCCESS:'}
+                                    {message.text}
+                                </span>
+                            </motion.div>
+                        )}
 
-                    <div className="pt-4 flex gap-3">
-                        <button onClick={onClose} className="flex-1 py-3 rounded-xl bg-white/5 text-white font-medium hover:bg-white/10">Cancel</button>
-                        <button className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500">Save Changes</button>
+                        {activeTab === 'general' && (
+                            <div className="space-y-8 max-w-lg">
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="space-y-3 group">
+                                        <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest ml-1 group-focus-within:text-white transition-colors">First Name</label>
+                                        <input
+                                            className="w-full bg-neutral-900/50 border border-neutral-800 rounded-none px-4 py-3 text-white focus:outline-none focus:border-white focus:bg-black focus:shadow-[0_0_15px_-5px_rgba(255,255,255,0.3)] transition-all font-mono text-sm"
+                                            value={formData.first_name}
+                                            onChange={e => setFormData({ ...formData, first_name: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="space-y-3 group">
+                                        <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest ml-1 group-focus-within:text-white transition-colors">Last Name</label>
+                                        <input
+                                            className="w-full bg-neutral-900/50 border border-neutral-800 rounded-none px-4 py-3 text-white focus:outline-none focus:border-white focus:bg-black focus:shadow-[0_0_15px_-5px_rgba(255,255,255,0.3)] transition-all font-mono text-sm"
+                                            value={formData.last_name}
+                                            onChange={e => setFormData({ ...formData, last_name: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-3 group">
+                                    <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest ml-1 group-focus-within:text-white transition-colors">Email Interface</label>
+                                    <div className="relative">
+                                        <input
+                                            className="w-full bg-neutral-900/50 border border-neutral-800 rounded-none px-4 py-3 text-white focus:outline-none focus:border-white focus:bg-black focus:shadow-[0_0_15px_-5px_rgba(255,255,255,0.3)] transition-all font-mono text-sm pl-10"
+                                            value={formData.email}
+                                            onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                        />
+                                        <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600 group-focus-within:text-white transition-colors" />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3 opacity-50">
+                                    <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest ml-1">User Identity (Immutable)</label>
+                                    <div className="relative">
+                                        <input className="w-full bg-neutral-900 border border-neutral-800 rounded-none px-4 py-3 text-neutral-500 font-mono text-sm cursor-not-allowed pl-10" value={user.username} readOnly />
+                                        <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" />
+                                    </div>
+                                </div>
+
+                                <div className="pt-6">
+                                    <button
+                                        onClick={handleUpdateProfile}
+                                        disabled={isLoading}
+                                        className="w-full py-4 bg-white text-black font-bold text-sm tracking-widest uppercase hover:bg-neutral-200 transition-all shadow-[0_0_20px_-5px_rgba(255,255,255,0.5)] hover:shadow-[0_0_30px_-5px_rgba(255,255,255,0.7)] disabled:opacity-50 disabled:shadow-none font-mono flex items-center justify-center gap-3"
+                                    >
+                                        {isLoading ? <span className="animate-spin text-black"><Zap size={16} /></span> : <Check size={16} />}
+                                        {isLoading ? 'EXECUTING...' : 'COMMIT CHANGES'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'security' && (
+                            <div className="space-y-8 max-w-lg">
+                                <div className="space-y-3 group">
+                                    <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest ml-1 group-focus-within:text-white transition-colors">Current Key</label>
+                                    <input
+                                        type="password"
+                                        className="w-full bg-neutral-900/50 border border-neutral-800 rounded-none px-4 py-3 text-white focus:outline-none focus:border-white focus:bg-black focus:shadow-[0_0_15px_-5px_rgba(255,255,255,0.3)] transition-all font-mono text-sm placeholder-neutral-800"
+                                        placeholder="INPUT_OLD_PASSWORD"
+                                        value={passData.old}
+                                        onChange={e => setPassData({ ...passData, old: e.target.value })}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="space-y-3 group">
+                                        <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest ml-1 group-focus-within:text-white transition-colors">New Key</label>
+                                        <input
+                                            type="password"
+                                            className="w-full bg-neutral-900/50 border border-neutral-800 rounded-none px-4 py-3 text-white focus:outline-none focus:border-white focus:bg-black focus:shadow-[0_0_15px_-5px_rgba(255,255,255,0.3)] transition-all font-mono text-sm placeholder-neutral-800"
+                                            placeholder="INPUT_NEW_PASSWORD"
+                                            value={passData.new}
+                                            onChange={e => setPassData({ ...passData, new: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="space-y-3 group">
+                                        <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest ml-1 group-focus-within:text-white transition-colors">Verify Key</label>
+                                        <input
+                                            type="password"
+                                            className="w-full bg-neutral-900/50 border border-neutral-800 rounded-none px-4 py-3 text-white focus:outline-none focus:border-white focus:bg-black focus:shadow-[0_0_15px_-5px_rgba(255,255,255,0.3)] transition-all font-mono text-sm placeholder-neutral-800"
+                                            placeholder="CONFIRM_PASSWORD"
+                                            value={passData.confirm}
+                                            onChange={e => setPassData({ ...passData, confirm: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="p-4 border border-white/10 bg-white/5 flex gap-4 items-start">
+                                    <div className="mt-1"><Shield size={14} className="text-white" /></div>
+                                    <div>
+                                        <h4 className="text-xs font-bold text-white uppercase tracking-widest mb-1">Security Protocol</h4>
+                                        <p className="text-[11px] text-neutral-400 leading-relaxed font-mono">
+                                            > 8+ characters required<br />
+                                            > Mix alphanumeric strongly recommended<br />
+                                            > Changes logged in system audit
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="pt-4">
+                                    <button
+                                        onClick={handleChangePassword}
+                                        disabled={isLoading}
+                                        className="w-full py-4 bg-white text-black font-bold text-sm tracking-widest uppercase hover:bg-neutral-200 transition-all shadow-[0_0_20px_-5px_rgba(255,255,255,0.5)] hover:shadow-[0_0_30px_-5px_rgba(255,255,255,0.7)] disabled:opacity-50 disabled:shadow-none font-mono flex items-center justify-center gap-3"
+                                    >
+                                        {isLoading ? <span className="animate-spin text-black"><Zap size={16} /></span> : <Lock size={16} />}
+                                        {isLoading ? 'UPDATING...' : 'UPDATE CREDENTIALS'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                     </div>
                 </div>
             </div>
