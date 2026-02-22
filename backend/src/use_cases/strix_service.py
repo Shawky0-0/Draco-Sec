@@ -24,7 +24,13 @@ try:
     STRIX_AVAILABLE = True
 except ImportError:
     STRIX_AVAILABLE = False
-    
+    StrixAgent = None
+    set_global_tracer = None
+    LLMConfig = None
+    # Dummy base class so DracoTracer can be defined safely on Windows
+    class Tracer:
+        def __init__(self, *args, **kwargs): pass
+
 logger = logging.getLogger(__name__)
 
 class DracoTracer(Tracer):
