@@ -19,7 +19,6 @@ class MonitorService:
     def start_watcher(self):
         if not os.path.exists(self.log_path):
             print(f"Warning: Suricata log file not found at {self.log_path}. Watcher will not start.")
-            # For demo purposes, we might want to create a dummy file or just return
             return
 
         self.running = True
@@ -28,24 +27,51 @@ class MonitorService:
         print(f"Started Suricata Log Watcher on {self.log_path}")
 
     def _tail_log(self):
-        # simple tail implementation
-        try:
-            with open(self.log_path, "r") as f:
-                # Go to the end of the file
-                f.seek(0, 2)
-                
-                while self.running:
-                    line = f.readline()
-                    if not line:
-                        time.sleep(0.1)
-                        continue
-                    
+        """
+        Robust tail implementation that handles log rotation.
+        """
+        current_file = open(self.log_path, "r")
+        current_inode = os.fstat(current_file.fileno()).st_ino
+        
+        # Go to the end of the file initially
+        current_file.seek(0, 2)
+        
+        while self.running:
+            try:
+                # 1. Read new lines
+                line = current_file.readline()
+                if line:
                     try:
                         self._process_line(line)
                     except Exception as e:
                         print(f"Error processing log line: {e}")
-        except Exception as e:
-            print(f"Watcher error: {e}")
+                    continue
+
+                # 2. If no new line, check for rotation
+                if not os.path.exists(self.log_path):
+                    time.sleep(0.1)
+                    continue
+
+                try:
+                    new_inode = os.stat(self.log_path).st_ino
+                    
+                    if new_inode != current_inode:
+                        # File rotated!
+                        print("Log rotation detected. Reopening file...")
+                        current_file.close()
+                        current_file = open(self.log_path, "r")
+                        current_inode = new_inode
+                        # Don't seek to end, read from start of new file
+                        continue
+                except OSError:
+                    # File might have been deleted/moved between exists check and stat
+                    pass
+                
+                time.sleep(0.1)
+                
+            except Exception as e:
+                print(f"Watcher error: {e}")
+                time.sleep(1)
 
     def _process_line(self, line):
         try:
@@ -62,8 +88,6 @@ class MonitorService:
             
             # Extract basic info
             timestamp_str = data.get("timestamp")
-            # 2023-10-27T10:00:00.123456+0000 -> python datetime
-            # For simplicity, we might just use utcnow if parsing fails or simplify parsing
             timestamp = datetime.now() # Fallback
             if timestamp_str:
                 try:
@@ -74,7 +98,7 @@ class MonitorService:
 
             # Determine Action (Active Response)
             severity = alert_data.get("severity")
-            source_ip = data.get("src_ip") # Use data.get("src_ip") for consistency with Suricata logs
+            source_ip = data.get("src_ip")
             alert_msg = alert_data.get("signature", "Unknown Alert")
             action = alert_data.get("action", "allowed")
 
@@ -103,6 +127,7 @@ class MonitorService:
                 
                 # Investigation
                 action=action, # allowed/blocked
+                status="new",
                 
                 # Evidence
                 payload_printable=data.get("payload_printable"),
@@ -114,7 +139,8 @@ class MonitorService:
             
             # Send Telegram Alert if Severity is High (1) or Medium (2)
             if new_alert.severity and new_alert.severity <= 2:
-                self.telegram_service.send_alert({
+                # Use a thread to avoid blocking the monitor loop
+                threading.Thread(target=self.telegram_service.send_alert, args=({
                     "signature": new_alert.signature,
                     "severity": new_alert.severity,
                     "src_ip": new_alert.src_ip,
@@ -122,7 +148,7 @@ class MonitorService:
                     "dest_ip": new_alert.dest_ip,
                     "dest_port": new_alert.dest_port,
                     "action": new_alert.action
-                })
+                },)).start()
                 
         except Exception as e:
             print(f"Error saving alert: {e}")

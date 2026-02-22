@@ -11,6 +11,7 @@ venv/
 *.log
 *.sqlite
 *.db
+!backend/db/.gitkeep
 .vscode/
 .idea/
 node_modules/
