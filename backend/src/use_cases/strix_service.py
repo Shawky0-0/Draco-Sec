@@ -69,7 +69,7 @@ class DracoTracer(Tracer):
         })
         return exec_id
         
-    def update_tool_execution(self, execution_id: int, status: str, result: Any | None = None) -> None:
+    def update_tool_execution(self, execution_id: int, status: str, result: Optional[Any] = None) -> None:
         """Override to capture tool updates."""
         super().update_tool_execution(execution_id, status, result)
         
@@ -102,7 +102,7 @@ class DracoTracer(Tracer):
             except Exception as e:
                 logger.warning(f"Failed to emit stats: {e}")
 
-    def update_agent_status(self, agent_id: str, status: str, error_message: str | None = None) -> None:
+    def update_agent_status(self, agent_id: str, status: str, error_message: Optional[str] = None) -> None:
         """Capture agent status changes."""
         super().update_agent_status(agent_id, status, error_message)
         
