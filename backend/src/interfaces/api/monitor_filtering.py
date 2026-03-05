@@ -3,8 +3,49 @@ from sqlalchemy.orm import Session
 from src.infrastructure.database import get_db
 from src.infrastructure.models import SuricataAlert
 from typing import List
+import socket
+import subprocess
+import re
 
 router = APIRouter(prefix="/monitor", tags=["monitoring"])
+
+
+def _get_own_ips() -> set:
+    """
+    Dynamically detect all IP addresses assigned to THIS machine's interfaces.
+    Works on any Linux host regardless of IP — no hardcoding needed.
+    Cached at module level (runs once per process startup).
+    """
+    if _get_own_ips._cache is not None:
+        return _get_own_ips._cache
+
+    own_ips = set(["127.0.0.1", "::1"])
+
+    # Method 1: Parse `ip addr show` — most reliable on Linux
+    try:
+        result = subprocess.run(
+            ["ip", "addr", "show"],
+            capture_output=True, text=True, timeout=3
+        )
+        for match in re.finditer(r"inet (\d+\.\d+\.\d+\.\d+)", result.stdout):
+            own_ips.add(match.group(1))
+    except Exception:
+        pass
+
+    # Method 2: Socket trick fallback (gets at least the primary outbound IP)
+    if len(own_ips) <= 2:  # Only loopback detected above
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            own_ips.add(s.getsockname()[0])
+            s.close()
+        except Exception:
+            pass
+
+    _get_own_ips._cache = own_ips
+    return own_ips
+
+_get_own_ips._cache = None  # Module-level cache
 
 # Known false positive patterns to filter out
 FALSE_POSITIVE_PATTERNS = [
@@ -39,10 +80,11 @@ def is_likely_false_positive(alert: SuricataAlert) -> bool:
     if alert.src_ip in TEST_IPS:
         return True
     
-    # Check if destination is our local network (can't attack ourselves)
-    if alert.src_ip and alert.dest_ip and alert.src_ip.startswith("192.168.") and alert.dest_ip.startswith("192.168."):
+    # Suppress alerts where THIS MACHINE is the source — that's self-generated noise.
+    # Attacks FROM other machines (even on the same LAN) are real threats.
+    if alert.src_ip and alert.src_ip in _get_own_ips():
         return True
-    
+
     return False
 
 

@@ -47,7 +47,8 @@ export const AuthProvider = ({ children }) => {
             // Map backend "tier" to frontend "plan" for consistency
             const mappedUser = {
                 ...userData,
-                plan: userData.tier
+                plan: userData.tier,
+                is_expired: userData.is_expired ?? false
             };
 
             setUser(mappedUser);
@@ -68,13 +69,14 @@ export const AuthProvider = ({ children }) => {
         });
 
         // Update local user state immediately for real-time UI reflection
-        const { tier, scans, days_remaining } = response.data;
+        const { tier, scans_remaining, days_remaining, is_expired } = response.data;
         setUser(prev => {
             const updated = {
                 ...prev,
                 plan: tier, // Ensure backend returns capitalized "Enterprise"/"Pro"
-                scans_remaining: scans,
-                days_remaining: days_remaining
+                scans_remaining: scans_remaining,
+                days_remaining: days_remaining,
+                is_expired: is_expired ?? false   // ← reset expired flag after new license
             };
             localStorage.setItem('user', JSON.stringify(updated)); // Sync persistence
             return updated;
@@ -102,6 +104,14 @@ export const AuthProvider = ({ children }) => {
         return response.data;
     };
 
+    const testTelegram = async (chatId, botToken) => {
+        const response = await axios.post(`${API_URL}/auth/test-telegram`, {
+            telegram_chat_id: chatId,
+            telegram_bot_token: botToken
+        });
+        return response.data;
+    };
+
     const logout = () => {
         setToken(null);
         setUser(null);
@@ -120,6 +130,7 @@ export const AuthProvider = ({ children }) => {
         activateLicense,
         updateProfile,
         changePassword,
+        testTelegram,
         loading
     };
 

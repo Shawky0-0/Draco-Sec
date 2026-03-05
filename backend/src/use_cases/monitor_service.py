@@ -9,12 +9,16 @@ from ..infrastructure.database import SessionLocal
 from ..infrastructure.models import SuricataAlert
 from ..infrastructure.telegram_service import TelegramService
 from .firewall_service import firewall_service
+from ..interfaces.api.monitor_filtering import _get_own_ips
 
 class MonitorService:
     def __init__(self, log_path="/var/log/suricata/eve.json"):
         self.log_path = log_path
         self.running = False
         self.telegram_service = TelegramService()
+        self.recent_alerts = {}  # Cache to debounce alerts
+        self.dedup_window_seconds = 60  # 1 minute window
+
 
     def start_watcher(self):
         if not os.path.exists(self.log_path):
@@ -80,6 +84,9 @@ class MonitorService:
                 self._save_alert(data)
         except json.JSONDecodeError:
             pass
+        except Exception as e:
+            import traceback
+            print(f"Error in _process_line: {e}\n{traceback.format_exc()}")
 
     def _save_alert(self, data):
         db: Session = SessionLocal()
@@ -102,22 +109,59 @@ class MonitorService:
             alert_msg = alert_data.get("signature", "Unknown Alert")
             action = alert_data.get("action", "allowed")
 
+            # Dynamically determine IPs that should NEVER be physically blocked.
+            # 1. This machine's own IPs (auto-detected)
+            # 2. Any additional safe IPs configured by the admin via environment variables
+            safe_ips = _get_own_ips().copy()
+            env_safe_ips = os.getenv("DRACO_SAFE_IPS", "")
+            if env_safe_ips:
+                safe_ips.update([ip.strip() for ip in env_safe_ips.split(",")])
+
+            dest_ip = data.get("dest_ip")
+            
+            # --- DEDUPLICATION LOGIC ---
+            # Create a unique key for the alert
+            dedup_key = f"{source_ip}_{dest_ip}_{alert_msg}"
+            
+            # Check if we saw this exact alert recently
+            current_time = time.time()
+            if dedup_key in self.recent_alerts:
+                time_since_last = current_time - self.recent_alerts[dedup_key]
+                if time_since_last < self.dedup_window_seconds:
+                    # Skip duplicate alert processing
+                    return
+            
+            # Update the cache with this new alert time
+            self.recent_alerts[dedup_key] = current_time
+
+            # Clean cache periodically (prevent memory leaks over long runs)
+            if len(self.recent_alerts) > 10000:
+                # Remove items older than the window
+                self.recent_alerts = {k: v for k, v in self.recent_alerts.items() if (current_time - v) < self.dedup_window_seconds}
+            # --- END DEDUPLICATION LOGIC ---
+
+
             # Active Response: Block IP if Severity is High (1) or Medium (2)
             if severity and severity <= 2:
-                try:
-                    # Attempt to block
-                    if firewall_service.block_ip(source_ip, reason=f"Active Response: {alert_msg}"):
-                        action = "blocked"
-                except Exception as e:
-                    print(f"Failed to execute Active Response: {e}")
+                if source_ip in safe_ips:
+                    action = "simulated_block (Safe IP)"
+                    print(f"Skipping physical block for safe IP: {source_ip}")
+                else:
+                    try:
+                        # Attempt to block (or check if already blocked)
+                        block_result = firewall_service.block_ip(source_ip, reason=f"Active Response: {alert_msg}")
+                        if block_result in ["new_block", "already_blocked"]:
+                            action = "blocked"
+                    except Exception as e:
+                        print(f"Failed to execute Active Response: {e}")
 
             new_alert = SuricataAlert(
                 timestamp=timestamp,
                 # Network Info
                 src_ip=source_ip,
-                src_port=alert_data.get("src_port"),
-                dest_ip=alert_data.get("dest_ip"),
-                dest_port=alert_data.get("dest_port"),
+                src_port=data.get("src_port"),
+                dest_ip=data.get("dest_ip"),
+                dest_port=data.get("dest_port"),
                 protocol=data.get("proto"),
                 
                 # Alert Info
@@ -151,7 +195,8 @@ class MonitorService:
                 },)).start()
                 
         except Exception as e:
-            print(f"Error saving alert: {e}")
+            import traceback
+            print(f"Error saving alert: {e}\n{traceback.format_exc()}")
         finally:
             db.close()
 

@@ -14,6 +14,23 @@ offensiveAPI.interceptors.request.use((config) => {
     return config;
 });
 
+// Auto-logout on invalid/expired token
+offensiveAPI.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401) {
+            const detail = error.response?.data?.detail ?? '';
+            // Only clear session for token-related errors, not "Scan not found" etc.
+            if (detail.toLowerCase().includes('token') || detail.toLowerCase().includes('credential')) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                window.location.href = '/login';
+            }
+        }
+        return Promise.reject(error);
+    }
+);
+
 // ===== Scan Management =====
 
 export const createScan = async (scanData) => {
@@ -33,6 +50,11 @@ export const getScan = async (scanId) => {
 
 export const stopScan = async (scanId) => {
     const response = await offensiveAPI.delete(`/scans/${scanId}`);
+    return response.data;
+};
+
+export const getScanReport = async (scanId) => {
+    const response = await offensiveAPI.get(`/scans/${scanId}/report`);
     return response.data;
 };
 
@@ -60,8 +82,17 @@ export const createMethodology = async (methodologyData) => {
 };
 
 export const listMethodologies = async () => {
-    const response = await offensiveAPI.get('/methodologies');
-    return response.data;
+    try {
+        const response = await offensiveAPI.get('/methodologies');
+        return response.data;
+    } catch (err) {
+        // Token expired/invalid — fall back to public defaults endpoint (no auth required)
+        if (err.response?.status === 401 || err.response?.status === 403) {
+            const response = await offensiveAPI.get('/methodologies/defaults');
+            return response.data;
+        }
+        throw err;
+    }
 };
 
 export const deleteMethodology = async (methodologyId) => {

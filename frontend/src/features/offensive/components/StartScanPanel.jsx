@@ -3,9 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Plus, Target, Settings, FileText, Trash2 } from 'lucide-react';
 import { createScan, listMethodologies, createMethodology, deleteMethodology } from '../../../services/offensiveService';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../hooks/useAuth';
 
 const StartScanPanel = ({ onClose, onScanStarted }) => {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [formData, setFormData] = useState({
         target: '',
         methodology: '',
@@ -13,6 +15,7 @@ const StartScanPanel = ({ onClose, onScanStarted }) => {
     });
     const [methodologies, setMethodologies] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [methodologyError, setMethodologyError] = useState(null);
     const [showMethodologyModal, setShowMethodologyModal] = useState(false);
 
     useEffect(() => {
@@ -20,6 +23,7 @@ const StartScanPanel = ({ onClose, onScanStarted }) => {
     }, []);
 
     const loadMethodologies = async () => {
+        setMethodologyError(null);
         try {
             const data = await listMethodologies();
             setMethodologies(data);
@@ -28,6 +32,7 @@ const StartScanPanel = ({ onClose, onScanStarted }) => {
             }
         } catch (error) {
             console.error('Error loading methodologies:', error);
+            setMethodologyError(error.response?.data?.detail || 'Failed to load methodologies. Check your connection.');
         }
     };
 
@@ -106,28 +111,38 @@ const StartScanPanel = ({ onClose, onScanStarted }) => {
                             <label className="block text-sm font-medium text-white mb-2">
                                 Methodology
                             </label>
-                            <div className="flex gap-2">
-                                <select
-                                    value={formData.methodology}
-                                    onChange={(e) => setFormData({ ...formData, methodology: e.target.value })}
-                                    className="flex-1 px-4 py-3 bg-[#0f0f0f] border border-gray-800 rounded text-white focus:outline-none focus:border-gray-600 transition-all"
-                                    required
-                                >
-                                    {methodologies.map((method) => (
-                                        <option key={method.id} value={method.title}>
-                                            {method.title}
-                                        </option>
-                                    ))}
-                                </select>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowMethodologyModal(true)}
-                                    className="px-4 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors flex items-center gap-2"
-                                    title="Create custom methodology"
-                                >
-                                    <Plus size={18} />
-                                </button>
-                            </div>
+                            {methodologyError ? (
+                                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-xs flex items-start justify-between gap-2">
+                                    <span>⚠ {methodologyError}</span>
+                                    <button type="button" onClick={loadMethodologies} className="underline whitespace-nowrap hover:text-red-300">Retry</button>
+                                </div>
+                            ) : (
+                                <div className="flex gap-2">
+                                    <select
+                                        value={formData.methodology}
+                                        onChange={(e) => setFormData({ ...formData, methodology: e.target.value })}
+                                        className="flex-1 px-4 py-3 bg-[#0f0f0f] border border-gray-800 rounded text-white focus:outline-none focus:border-gray-600 transition-all"
+                                        required
+                                    >
+                                        {methodologies.length === 0 && (
+                                            <option value="" disabled>Loading methodologies...</option>
+                                        )}
+                                        {methodologies.map((method) => (
+                                            <option key={method.id} value={method.title}>
+                                                {method.title}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowMethodologyModal(true)}
+                                        className="px-4 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                                        title="Create custom methodology"
+                                    >
+                                        <Plus size={18} />
+                                    </button>
+                                </div>
+                            )}
                             <p className="text-xs text-gray-500 mt-2">
                                 Select testing approach or create custom
                             </p>
@@ -150,10 +165,21 @@ const StartScanPanel = ({ onClose, onScanStarted }) => {
                             </p>
                         </div>
 
+                        {/* Scan Limit Warning */}
+                        {user && user.scans_remaining <= 0 && (
+                            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm flex items-start gap-3">
+                                <span className="mt-0.5">⚠</span>
+                                <div>
+                                    <p className="font-bold">Scan Limit Reached</p>
+                                    <p className="text-xs opacity-90 mt-1">You have 0 scans remaining on your {user.plan} plan. Please renew your license to continue testing.</p>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Launch Button */}
                         <motion.button
                             type="submit"
-                            disabled={loading}
+                            disabled={loading || (user && user.scans_remaining <= 0)}
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                             className="w-full py-4 bg-gray-800 hover:bg-gray-700 text-white font-semibold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"

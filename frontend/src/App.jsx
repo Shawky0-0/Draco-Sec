@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { DashboardProvider } from './context/DashboardContext';
 import { ScansProvider } from './context/ScansContext';
@@ -23,6 +23,16 @@ import AgentFeedPage from './features/offensive/AgentFeedPage';
 import BugsPage from './features/offensive/BugsPage';
 import ReportsPage from './features/offensive/ReportsPage';
 import { AnimatePresence } from 'framer-motion';
+import { useAuth } from './hooks/useAuth';
+
+// Guard: only Enterprise users can access Defensive routes
+const EnterpriseRoute = () => {
+  const { user } = useAuth();
+  if (user?.plan !== 'Enterprise') {
+    return <Navigate to="/offensive/dashboard" replace />;
+  }
+  return <Outlet />;
+};
 
 const AnimatedRoutes = () => {
   const location = useLocation();
@@ -50,10 +60,13 @@ const AnimatedRoutes = () => {
             <Route path="/offensive/reports" element={<ReportsPage />} />
             <Route path="/defensive/phishing-campaigns/campaign/:id" element={<CampaignDashboard />} />
 
-            <Route path="/defensive/dashboard" element={<DefensiveDashboard />} />
-            <Route path="/defensive/monitoring" element={<MonitoringPage />} />
-            <Route path="/defensive/scans" element={<ScansPage />} />
-            <Route path="/defensive/phishing-campaigns" element={<PhishingPage />} />
+            {/* Defensive routes — Enterprise only */}
+            <Route element={<EnterpriseRoute />}>
+              <Route path="/defensive/dashboard" element={<DefensiveDashboard />} />
+              <Route path="/defensive/monitoring" element={<MonitoringPage />} />
+              <Route path="/defensive/scans" element={<ScansPage />} />
+              <Route path="/defensive/phishing-campaigns" element={<PhishingPage />} />
+            </Route>
             <Route path="/draco-ai" element={<DracoAIPage />} />
             <Route path="/profile" element={<ProfilePage />} />
           </Route>

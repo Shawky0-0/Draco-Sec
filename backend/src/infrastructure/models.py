@@ -17,6 +17,9 @@ class User(Base):
     scans_remaining = Column(Integer, default=5)
     license_key = Column(String, nullable=True)
     license_expiry = Column(DateTime, nullable=True) # Allows Trial users logic
+    # Telegram Alerts
+    telegram_chat_id = Column(String, nullable=True)
+    telegram_bot_token = Column(String, nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -136,6 +139,9 @@ class OffensiveScan(Base):
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Final pentest report (markdown) written by Strix at scan completion
+    final_report_md = Column(String, nullable=True)
+
 
 class ScanMethodology(Base):
     """Custom penetration testing methodologies created by users."""
@@ -175,5 +181,19 @@ class AgentEvent(Base):
     content = Column(String)  # Event data (JSON or text)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
+class NetworkDevice(Base):
+    """Discovered network devices using active ARP scanning."""
+    __tablename__ = "network_devices"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    ip_address = Column(String, index=True, unique=True)
+    mac_address = Column(String, index=True)
+    hostname = Column(String, nullable=True)
+    vendor = Column(String, nullable=True)
+    
+    # Status tracking
+    is_active = Column(Integer, default=1)  # 1 for active, 0 for inactive
+    first_seen = Column(DateTime, default=datetime.utcnow)
+    last_seen = Column(DateTime, default=datetime.utcnow)
 
 

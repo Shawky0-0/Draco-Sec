@@ -17,7 +17,8 @@ export const LoginPage = () => {
             await login(formData.username, formData.password);
             navigate('/');
         } catch (err) {
-            setError("Invalid credentials");
+            console.error("DEBUG LOGIN ERROR:", err);
+            setError(err.response?.data?.detail || "Invalid credentials");
         }
     };
 

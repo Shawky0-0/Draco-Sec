@@ -16,7 +16,7 @@ class FirewallService:
             existing = db.query(BlockedIP).filter(BlockedIP.ip_address == ip_address, BlockedIP.active == 1).first()
             if existing:
                 logger.info(f"IP {ip_address} is already blocked.")
-                return False
+                return "already_blocked"
 
             # Add iptables rule to block the IP
             try:
@@ -57,7 +57,7 @@ class FirewallService:
             db.commit()
             
             logger.info(f"Active Response: Blocked IP {ip_address} - Reason: {reason}")
-            return True
+            return "new_block"
             
         except Exception as e:
             logger.error(f"Error in block_ip: {str(e)}")

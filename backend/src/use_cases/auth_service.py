@@ -51,10 +51,13 @@ class AuthService:
         # Use str(user.id) because JWT expects string subject usually
         token = create_access_token({"sub": user.username, "id": str(user.id)})
         
-        # Calculate days remaining
+        # Calculate days remaining (clamped to 0 minimum - never show negative)
         days_left = 0
         if user.license_expiry:
-             days_left = (user.license_expiry - datetime.utcnow()).days
+            raw_days = (user.license_expiry - datetime.utcnow()).days
+            days_left = max(0, raw_days)
+        
+        is_expired = user.license_expiry and (user.license_expiry - datetime.utcnow()).days < 0
              
         return {
             "access_token": token,
@@ -64,8 +67,11 @@ class AuthService:
                 "name": f"{user.first_name} {user.last_name}",
                 "email": user.email,
                 "tier": user.plan_tier, 
-                "scans": user.scans_remaining,
+                "scans_remaining": user.scans_remaining,
                 "days_remaining": days_left,
+                "is_expired": is_expired,
+                "telegram_chat_id": user.telegram_chat_id,
+                "telegram_bot_token": user.telegram_bot_token,
                 "avatar": None 
             }
         }
@@ -114,6 +120,10 @@ class AuthService:
         if "email" in data:
             # Check unique email logic could go here
             user.email = data["email"]
+        if "telegram_chat_id" in data:
+            user.telegram_chat_id = data["telegram_chat_id"]
+        if "telegram_bot_token" in data:
+            user.telegram_bot_token = data["telegram_bot_token"]
             
         db.commit()
         db.refresh(user)

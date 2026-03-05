@@ -14,7 +14,10 @@ import {
     Filter,
     Download,
     ExternalLink,
-    XCircle
+    XCircle,
+    Monitor,
+    Server,
+    Smartphone
 } from 'lucide-react';
 import API_BASE_URL from "../config/api";
 
@@ -25,6 +28,10 @@ const MonitoringPage = () => {
     const [selectedAlert, setSelectedAlert] = useState(null);
     const [selectedFirewallItem, setSelectedFirewallItem] = useState(null);
     const [enrichedAlert, setEnrichedAlert] = useState(null);
+
+    const [activeTab, setActiveTab] = useState('alerts'); // 'alerts' or 'devices'
+    const [devices, setDevices] = useState([]);
+    const [isScanning, setIsScanning] = useState(false);
 
     const [isLoading, setIsLoading] = useState(true);
     const [activeQueue, setActiveQueue] = useState('all'); // all, critical, high, medium, low
@@ -39,17 +46,22 @@ const MonitoringPage = () => {
     };
 
     useEffect(() => {
-        // Fetch both initially
+        // Fetch initially
         fetchAlerts();
         fetchBlockedIps();
+        fetchDevices();
 
-        // Poll both
+        // Poll 
         const interval = setInterval(() => {
-            fetchAlerts();
-            fetchBlockedIps();
-        }, 2000);
+            if (activeTab === 'alerts') {
+                fetchAlerts();
+                fetchBlockedIps();
+            } else {
+                fetchDevices();
+            }
+        }, activeTab === 'alerts' ? 2000 : 10000);
         return () => clearInterval(interval);
-    }, [filterSeverity]);
+    }, [filterSeverity, activeTab]);
 
     const fetchAlerts = async () => {
         try {
@@ -80,6 +92,32 @@ const MonitoringPage = () => {
             setIsLoading(false);
         } catch (error) {
             console.error("Error fetching blocked IPs:", error);
+        }
+    };
+
+    const fetchDevices = async () => {
+        try {
+            const response = await axios.get(`${API_BASE}/devices`);
+            setDevices(response.data);
+            setIsLoading(false);
+        } catch (error) {
+            console.error("Error fetching devices:", error);
+            setIsLoading(false);
+        }
+    };
+
+    const handleScanNetwork = async () => {
+        if (isScanning) return;
+        setIsScanning(true);
+        try {
+            const response = await axios.post(`${API_BASE}/devices/scan`);
+            showToast(response.data.message, 'success');
+            fetchDevices();
+        } catch (error) {
+            console.error("Error scanning network:", error);
+            showToast("Failed to scan network", 'error');
+        } finally {
+            setIsScanning(false);
         }
     };
 
@@ -175,8 +213,19 @@ const MonitoringPage = () => {
                 {/* Unified Table Header - Contextual */}
                 <div className="p-4 border-b border-white/5 flex justify-between items-center shrink-0">
                     <div className="flex items-center gap-4">
-                        <div className="px-3 py-1.5 rounded-md text-sm font-medium bg-white/5 text-gray-300 border border-white/10">
-                            Unified Monitor
+                        <div className="flex bg-white/5 p-1 rounded-lg border border-white/10">
+                            <button
+                                onClick={() => setActiveTab('alerts')}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'alerts' ? 'bg-white/10 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                            >
+                                <Shield size={14} /> Alerts
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('devices')}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'devices' ? 'bg-emerald-500/20 text-emerald-400' : 'text-gray-400 hover:text-white'}`}
+                            >
+                                <Network size={14} /> Devices
+                            </button>
                         </div>
                     </div>
 
@@ -192,189 +241,273 @@ const MonitoringPage = () => {
                         </div>
 
                         <div className="text-sm text-gray-400">
-                            {filteredAlerts.length + blockedIps.length} events
+                            {activeTab === 'alerts' ? `${filteredAlerts.length + blockedIps.length} events` : `${devices.length} devices`}
                         </div>
                     </div>
                 </div>
 
-                {/* Filters Row */}
-                <div className="px-4 py-2 border-b border-white/5 flex items-center gap-3 bg-white/[0.02]">
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Severity:</span>
-                        <div className="flex bg-white/5 rounded-lg p-1">
-                            {['all', 'critical', 'high', 'medium', 'low'].map(severity => (
-                                <button
-                                    key={severity}
-                                    onClick={() => setActiveQueue(severity)}
-                                    className={`px-3 py-1 rounded text-xs font-medium capitalize transition-all ${activeQueue === severity
-                                        ? 'bg-white/10 text-white shadow-sm'
-                                        : 'text-gray-400 hover:text-white'
-                                        }`}
-                                >
-                                    {severity}
-                                </button>
-                            ))}
+                {/* Content based on tab */}
+                {activeTab === 'alerts' ? (
+                    <>
+                        {/* Filters Row */}
+                        <div className="px-4 py-2 border-b border-white/5 flex items-center gap-3 bg-white/[0.02]">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Severity:</span>
+                                <div className="flex bg-white/5 rounded-lg p-1">
+                                    {['all', 'critical', 'high', 'medium', 'low'].map(severity => (
+                                        <button
+                                            key={severity}
+                                            onClick={() => setActiveQueue(severity)}
+                                            className={`px-3 py-1 rounded text-xs font-medium capitalize transition-all ${activeQueue === severity
+                                                ? 'bg-white/10 text-white shadow-sm'
+                                                : 'text-gray-400 hover:text-white'
+                                                }`}
+                                        >
+                                            {severity}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
 
-                {/* Helper Function for Table Body */}
-                <div className="overflow-auto flex-1">
-                    <table className="w-full text-left">
-                        <thead className="bg-white/5 text-xs uppercase font-medium text-gray-300 sticky top-0 z-10 backdrop-blur-sm">
-                            <tr>
-                                <th className="px-4 py-3">Time</th>
-                                <th className="px-4 py-3">Severity</th>
-                                <th className="px-4 py-3">Status</th>
-                                <th className="px-4 py-3">Signature / Reason</th>
-                                <th className="px-4 py-3">Source</th>
-                                <th className="px-4 py-3">Destination</th>
-                                <th className="px-4 py-3">Protocol</th>
-                                <th className="px-4 py-3">Action</th>
-                                <th className="px-4 py-3"></th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                            {(() => {
-                                // 1. Normalize and Merge Data
-                                const normalizedAlerts = filteredAlerts.map(a => ({
-                                    ...a,
-                                    itemType: 'alert',
-                                    sortTime: new Date(a.timestamp).getTime()
-                                }));
+                        {/* Helper Function for Table Body */}
+                        <div className="overflow-auto flex-1">
+                            <table className="w-full text-left">
+                                <thead className="bg-white/5 text-xs uppercase font-medium text-gray-300 sticky top-0 z-10 backdrop-blur-sm">
+                                    <tr>
+                                        <th className="px-4 py-3">Time</th>
+                                        <th className="px-4 py-3">Severity</th>
+                                        <th className="px-4 py-3">Status</th>
+                                        <th className="px-4 py-3">Signature / Reason</th>
+                                        <th className="px-4 py-3">Source</th>
+                                        <th className="px-4 py-3">Destination</th>
+                                        <th className="px-4 py-3">Protocol</th>
+                                        <th className="px-4 py-3">Action</th>
+                                        <th className="px-4 py-3"></th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {(() => {
+                                        // 1. Normalize and Merge Data
+                                        const normalizedAlerts = filteredAlerts.map(a => ({
+                                            ...a,
+                                            itemType: 'alert',
+                                            sortTime: new Date(a.timestamp).getTime()
+                                        }));
 
-                                const normalizedBlocks = blockedIps
-                                    .filter(b => {
-                                        if (activeQueue === 'all') return true;
-                                        if (activeQueue === 'critical') return true;
-                                        // Firewall blocks are treated as Critical/High priority, so hide them in Medium/Low views
-                                        return false;
-                                    })
-                                    .map(b => ({
-                                        ...b,
-                                        itemType: 'firewall',
-                                        sortTime: new Date(b.blocked_at).getTime(),
-                                        id: `block-${b.id || b.ip}` // Ensure unique ID
-                                    }));
+                                        const normalizedBlocks = blockedIps
+                                            .filter(b => {
+                                                if (activeQueue === 'all') return true;
+                                                if (activeQueue === 'critical') return true;
+                                                // Firewall blocks are treated as Critical/High priority, so hide them in Medium/Low views
+                                                return false;
+                                            })
+                                            .map(b => ({
+                                                ...b,
+                                                itemType: 'firewall',
+                                                sortTime: new Date(b.blocked_at).getTime(),
+                                                id: `block-${b.id || b.ip}` // Ensure unique ID
+                                            }));
 
-                                const combinedData = [...normalizedAlerts, ...normalizedBlocks].sort((a, b) => b.sortTime - a.sortTime);
+                                        const combinedData = [...normalizedAlerts, ...normalizedBlocks].sort((a, b) => b.sortTime - a.sortTime);
 
-                                if (combinedData.length === 0) {
-                                    return (
-                                        <tr>
-                                            <td colSpan="9" className="px-4 py-12 text-center text-gray-500">
-                                                No events found
-                                            </td>
-                                        </tr>
-                                    );
-                                }
+                                        if (combinedData.length === 0) {
+                                            return (
+                                                <tr>
+                                                    <td colSpan="9" className="px-4 py-12 text-center text-gray-500">
+                                                        No events found
+                                                    </td>
+                                                </tr>
+                                            );
+                                        }
 
-                                return combinedData.map(item => (
-                                    <tr
-                                        key={item.id}
-                                        onClick={() => {
-                                            if (item.itemType === 'alert') {
-                                                setSelectedAlert(item);
-                                                fetchEnrichedAlert(item.id);
-                                            } else {
-                                                setSelectedFirewallItem(item);
-                                            }
-                                        }}
-                                        className={`transition-colors text-sm group cursor-pointer ${item.itemType === 'alert' ? 'hover:bg-emerald-500/10' : 'hover:bg-red-500/10'}`}
-                                    >
-                                        {/* Time */}
-                                        <td className="px-4 py-3 whitespace-nowrap text-gray-400 font-mono text-xs">
-                                            {new Date(item.sortTime).toLocaleTimeString()}
-                                        </td>
+                                        return combinedData.map(item => (
+                                            <tr
+                                                key={item.id}
+                                                onClick={() => {
+                                                    if (item.itemType === 'alert') {
+                                                        setSelectedAlert(item);
+                                                        fetchEnrichedAlert(item.id);
+                                                    } else {
+                                                        setSelectedFirewallItem(item);
+                                                    }
+                                                }}
+                                                className={`transition-colors text-sm group cursor-pointer ${item.itemType === 'alert' ? 'hover:bg-emerald-500/10' : 'hover:bg-red-500/10'}`}
+                                            >
+                                                {/* Time */}
+                                                <td className="px-4 py-3 whitespace-nowrap text-gray-400 font-mono text-xs">
+                                                    {new Date(item.sortTime).toLocaleTimeString()}
+                                                </td>
 
-                                        {/* Severity */}
-                                        <td className="px-4 py-3">
-                                            {item.itemType === 'alert' ? (
-                                                <span className={`px-2 py-1 rounded text-xs font-medium border ${getSeverityColor(item.severity)}`}>
-                                                    {getSeverityLabel(item.severity)}
-                                                </span>
-                                            ) : (
-                                                <span className="px-2 py-1 rounded text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/30">
-                                                    Firewall
-                                                </span>
-                                            )}
-                                        </td>
+                                                {/* Severity */}
+                                                <td className="px-4 py-3">
+                                                    {item.itemType === 'alert' ? (
+                                                        <span className={`px-2 py-1 rounded text-xs font-medium border ${getSeverityColor(item.severity)}`}>
+                                                            {getSeverityLabel(item.severity)}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="px-2 py-1 rounded text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/30">
+                                                            Firewall
+                                                        </span>
+                                                    )}
+                                                </td>
 
-                                        {/* Status */}
-                                        <td className="px-4 py-3">
-                                            {item.itemType === 'alert' ? (
-                                                <StatusBadge status={item.status || 'new'} />
-                                            ) : (
-                                                <span className="px-2 py-1 rounded text-xs font-medium bg-emerald-500/10 text-emerald-400">
-                                                    Active
-                                                </span>
-                                            )}
-                                        </td>
+                                                {/* Status */}
+                                                <td className="px-4 py-3">
+                                                    {item.itemType === 'alert' ? (
+                                                        <StatusBadge status={item.status || 'new'} />
+                                                    ) : (
+                                                        <span className="px-2 py-1 rounded text-xs font-medium bg-emerald-500/10 text-emerald-400">
+                                                            Active
+                                                        </span>
+                                                    )}
+                                                </td>
 
-                                        {/* Signature */}
-                                        <td className="px-4 py-3 text-white font-medium max-w-md truncate group-hover:text-emerald-400 transition-colors" title={item.itemType === 'alert' ? item.signature : item.reason}>
-                                            {item.itemType === 'alert' ? formatSignature(item.signature) : item.reason}
-                                        </td>
+                                                {/* Signature */}
+                                                <td className="px-4 py-3 text-white font-medium max-w-md truncate group-hover:text-emerald-400 transition-colors" title={item.itemType === 'alert' ? item.signature : item.reason}>
+                                                    {item.itemType === 'alert' ? formatSignature(item.signature) : item.reason}
+                                                </td>
 
-                                        {/* Source */}
-                                        <td className="px-4 py-3 font-mono text-xs text-gray-300">
-                                            {item.itemType === 'alert' ? (
-                                                <span>{item.src_ip}:{item.src_port || 'N/A'}</span>
-                                            ) : (
-                                                <span className="text-red-300">{item.ip}</span>
-                                            )}
-                                        </td>
+                                                {/* Source */}
+                                                <td className="px-4 py-3 font-mono text-xs text-gray-300">
+                                                    {item.itemType === 'alert' ? (
+                                                        <span>{item.src_ip}:{item.src_port || 'N/A'}</span>
+                                                    ) : (
+                                                        <span className="text-red-300">{item.ip}</span>
+                                                    )}
+                                                </td>
 
-                                        {/* Dest */}
-                                        <td className="px-4 py-3 font-mono text-xs text-gray-300">
-                                            {item.itemType === 'alert' ? (
-                                                <span>{item.dest_ip}:{item.dest_port}</span>
-                                            ) : (
-                                                <span className="text-gray-500">Any</span>
-                                            )}
-                                        </td>
+                                                {/* Dest */}
+                                                <td className="px-4 py-3 font-mono text-xs text-gray-300">
+                                                    {item.itemType === 'alert' ? (
+                                                        <span>{item.dest_ip}:{item.dest_port}</span>
+                                                    ) : (
+                                                        <span className="text-gray-500">Any</span>
+                                                    )}
+                                                </td>
 
-                                        {/* Protocol */}
-                                        <td className="px-4 py-3 text-gray-400 uppercase text-xs">
-                                            {item.itemType === 'alert' ? item.protocol : 'ALL'}
-                                        </td>
+                                                {/* Protocol */}
+                                                <td className="px-4 py-3 text-gray-400 uppercase text-xs">
+                                                    {item.itemType === 'alert' ? item.protocol : 'ALL'}
+                                                </td>
 
-                                        {/* Action */}
-                                        <td className="px-4 py-3">
-                                            {item.itemType === 'alert' ? (
-                                                item.action === 'blocked' ? (
-                                                    <span className="flex items-center gap-1 text-emerald-400 text-xs">
-                                                        <Shield className="w-3 h-3" /> Blocked
+                                                {/* Action */}
+                                                <td className="px-4 py-3">
+                                                    {item.itemType === 'alert' ? (
+                                                        item.action === 'blocked' ? (
+                                                            <span className="flex items-center gap-1 text-emerald-400 text-xs">
+                                                                <Shield className="w-3 h-3" /> Blocked
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-gray-500 text-xs">Allowed</span>
+                                                        )
+                                                    ) : (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleUnblockIp(item.ip);
+                                                            }}
+                                                            className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 transition-colors"
+                                                        >
+                                                            Unblock
+                                                        </button>
+                                                    )}
+                                                </td>
+
+                                                <td className="px-4 py-3">
+                                                    {item.itemType === 'alert' && (
+                                                        <button className="text-gray-500 hover:text-emerald-400 transition-colors">
+                                                            <ChevronRight size={16} />
+                                                        </button>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ));
+                                    })()}
+                                </tbody>
+                            </table>
+                        </div>
+                    </>
+                ) : (
+                    // Devices Tab Content
+                    <div className="flex flex-col h-full">
+                        <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+                            <p className="text-sm text-gray-400 flex items-center gap-2">
+                                <Network className="text-emerald-400" size={16} />
+                                Local subnet devices actively discovered via ARP scanning.
+                            </p>
+                            <button
+                                onClick={handleScanNetwork}
+                                disabled={isScanning}
+                                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${isScanning
+                                    ? 'bg-emerald-500/20 text-emerald-400/50 cursor-not-allowed border border-emerald-500/10'
+                                    : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30'
+                                    }`}
+                            >
+                                {isScanning ? (
+                                    <><Loader2 size={16} className="animate-spin" /> Scanning...</>
+                                ) : (
+                                    <><Search size={16} /> Scan Network</>
+                                )}
+                            </button>
+                        </div>
+                        <div className="overflow-auto flex-1 p-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                {devices.length === 0 ? (
+                                    <div className="col-span-full py-12 text-center text-gray-500">
+                                        No devices discovered yet. Click "Scan Network" to begin.
+                                    </div>
+                                ) : (
+                                    devices.map(device => (
+                                        <div key={device.id} className="bg-[#1a1a1a]/40 border border-white/5 rounded-xl p-4 hover:border-emerald-500/30 hover:bg-[#1a1a1a]/80 transition-all flex flex-col gap-3 group relative overflow-hidden">
+                                            {/* Status indicator line */}
+                                            <div className={`absolute top-0 left-0 w-full h-1 ${device.is_active ? 'bg-emerald-500/50' : 'bg-gray-600/50'}`}></div>
+
+                                            <div className="flex justify-between items-start">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`p-2 rounded-lg ${device.is_active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-gray-500/10 text-gray-400'}`}>
+                                                        {device.vendor && device.vendor.toLowerCase().includes('apple') ? <Smartphone size={20} /> : <Monitor size={20} />}
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="text-white font-medium text-sm truncate max-w-[120px]">{device.hostname || 'Unknown Device'}</h4>
+                                                        <p className="text-xs text-gray-500 truncate">{device.vendor || 'Unknown Vendor'}</p>
+                                                    </div>
+                                                </div>
+                                                {device.is_active ? (
+                                                    <span className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                                        <span className="relative flex h-1.5 w-1.5">
+                                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                                                        </span>
+                                                        Online
                                                     </span>
                                                 ) : (
-                                                    <span className="text-gray-500 text-xs">Allowed</span>
-                                                )
-                                            ) : (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleUnblockIp(item.ip);
-                                                    }}
-                                                    className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 transition-colors"
-                                                >
-                                                    Unblock
-                                                </button>
-                                            )}
-                                        </td>
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-gray-500/10 text-gray-400 border border-gray-500/20">Offline</span>
+                                                )}
+                                            </div>
 
-                                        <td className="px-4 py-3">
-                                            {item.itemType === 'alert' && (
-                                                <button className="text-gray-500 hover:text-emerald-400 transition-colors">
-                                                    <ChevronRight size={16} />
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ));
-                            })()}
-                        </tbody>
-                    </table>
-                </div>
+                                            <div className="space-y-1.5 mt-2">
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-xs text-gray-500 font-mono">IP</span>
+                                                    <code className={device.is_active ? 'text-emerald-400' : 'text-gray-400'}>{device.ip_address}</code>
+                                                </div>
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-xs text-gray-500 font-mono">MAC</span>
+                                                    <code className="text-gray-400 text-xs">{device.mac_address}</code>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-2 pt-3 border-t border-white/5 text-[10px] text-gray-500 flex justify-between">
+                                                <span>First seen: {new Date(device.first_seen).toLocaleDateString()}</span>
+                                                <span>Last seen: {new Date(device.last_seen).toLocaleTimeString()}</span>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Enriched Alert Modal */}
@@ -607,10 +740,50 @@ const InfoRow = ({ label, value, valueClass = "text-gray-300" }) => (
 );
 
 const FirewallDetailsModal = ({ item, onClose, onUnblock, showToast }) => {
+    const [relatedAlert, setRelatedAlert] = useState(null);
+    const [rawEvt, setRawEvt] = useState(null);
+    const [loadingAlert, setLoadingAlert] = useState(true);
+
+    // Extract signature from reason string "Active Response: ET EXPLOIT ..."
+    const signatureText = item.reason?.replace(/^Active Response:\s*/i, '') || item.reason || 'Unknown';
+
+    useEffect(() => {
+        // Try to find the original alert that triggered this block
+        const findAlert = async () => {
+            try {
+                const res = await axios.get(`${API_BASE}/alerts`, { params: { limit: 200 } });
+                const match = res.data.find(a =>
+                    a.src_ip === item.ip &&
+                    a.signature && item.reason?.includes(a.signature.substring(0, 20))
+                );
+                if (match) {
+                    setRelatedAlert(match);
+                    // Try to get enriched data with raw event
+                    const enriched = await axios.get(`${API_BASE}/alerts/enriched/${match.id}`);
+                    if (enriched.data?.raw_event) {
+                        try {
+                            setRawEvt(JSON.parse(enriched.data.raw_event));
+                        } catch { setRawEvt(null); }
+                    }
+                }
+            } catch (e) { console.error(e); }
+            finally { setLoadingAlert(false); }
+        };
+        findAlert();
+    }, [item]);
+
+    const severityColor = {
+        1: { bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400', label: 'Critical' },
+        2: { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400', label: 'High' },
+        3: { bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', text: 'text-yellow-400', label: 'Medium' },
+        4: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400', label: 'Low' },
+    };
+    const sev = severityColor[relatedAlert?.severity] || severityColor[2];
+
     return (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 overflow-y-auto">
-            <div className="min-h-screen p-6 flex items-center justify-center">
-                <div className="bg-[#0a0a0a] border border-white/10 rounded-2xl w-full max-w-2xl shadow-2xl">
+            <div className="min-h-screen p-6 flex items-start justify-center">
+                <div className="bg-[#0a0a0a] border border-white/10 rounded-2xl w-full max-w-3xl my-8 shadow-2xl">
                     {/* Header */}
                     <div className="p-6 border-b border-white/5 flex justify-between items-start bg-[#1a1a1a]/60 rounded-t-2xl">
                         <div className="flex items-center gap-3">
@@ -619,7 +792,7 @@ const FirewallDetailsModal = ({ item, onClose, onUnblock, showToast }) => {
                             </div>
                             <div>
                                 <h2 className="text-xl font-bold text-white">Active Firewall Block</h2>
-                                <p className="text-sm text-gray-400">Rule ID: {item.id}</p>
+                                <p className="text-sm text-gray-400 font-mono">Rule ID: block-{item.ip?.replace(/\./g, '-')}</p>
                             </div>
                         </div>
                         <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
@@ -627,54 +800,122 @@ const FirewallDetailsModal = ({ item, onClose, onUnblock, showToast }) => {
                         </button>
                     </div>
 
-                    <div className="p-6 space-y-6">
+                    <div className="p-6 space-y-5">
                         {/* Status Banner */}
                         <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start gap-3">
                             <AlertTriangle className="text-red-400 shrink-0 mt-0.5" size={20} />
                             <div>
-                                <h3 className="text-sm font-semibold text-red-200 mb-1">Access Denied</h3>
+                                <h3 className="text-sm font-semibold text-red-200 mb-1">Access Denied — Traffic Blocked by IPTables</h3>
                                 <p className="text-sm text-red-200/70 leading-relaxed">
-                                    Traffic from this IP address is currently being <strong>dropped</strong> by the firewall. This is an automated Active Response to detected malicious activity.
+                                    All packets from <code className="text-red-300">{item.ip}</code> are being silently <strong>DROPped</strong> across all ports and protocols. Triggered by: <span className="text-yellow-300 font-medium">{signatureText}</span>
                                 </p>
                             </div>
                         </div>
 
-                        {/* Details Grid */}
+                        {/* Info Grid */}
                         <div className="grid grid-cols-2 gap-4">
-                            <Section title="Target Info" icon={Globe}>
-                                <InfoRow label="Blocked IP" value={<code className="text-red-400 text-lg">{item.ip}</code>} />
-                                <InfoRow label="Status" value={
-                                    <span className="flex items-center gap-1.5 text-emerald-400">
+                            <Section title="Blocked Source" icon={Globe}>
+                                <InfoRow label="IP Address" value={<code className="text-red-400 text-base font-bold">{item.ip}</code>} />
+                                <InfoRow label="Block Status" value={
+                                    <span className="flex items-center gap-1.5 text-rose-400 text-xs">
                                         <span className="relative flex h-2 w-2">
-                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
                                         </span>
-                                        Active
+                                        Active – Blocking all traffic
                                     </span>
                                 } />
                                 <InfoRow label="Blocked At" value={new Date(item.blocked_at).toLocaleString()} />
+                                {relatedAlert && <InfoRow label="Detected At" value={new Date(relatedAlert.timestamp).toLocaleString()} />}
                             </Section>
 
-                            <Section title="Block Logic" icon={Terminal}>
-                                <InfoRow label="Enforcement" value="IPTables Drop" />
+                            <Section title="Block Enforcement" icon={Terminal}>
+                                <InfoRow label="Method" value={<span className="text-orange-400 font-mono text-xs">iptables -A INPUT -s {item.ip} -j DROP</span>} />
                                 <InfoRow label="Scope" value="All Protocols / All Ports" />
-                                <InfoRow label="Reason" value={item.reason} valueClass="text-yellow-400 font-medium break-words text-right" />
+                                <InfoRow label="Auto-Response" value={<span className="text-emerald-400">Suricata Active Response</span>} />
                             </Section>
                         </div>
 
+                        {/* Triggering Alert */}
+                        {loadingAlert ? (
+                            <div className="bg-[#1a1a1a]/60 border border-white/5 rounded-xl p-4 flex items-center gap-3">
+                                <Loader2 className="animate-spin text-gray-400" size={16} />
+                                <span className="text-sm text-gray-400">Looking up triggering alert…</span>
+                            </div>
+                        ) : relatedAlert ? (
+                            <Section title="Triggering Detection" icon={AlertTriangle}>
+                                <InfoRow label="Signature" value={<span className="text-yellow-300 font-medium">{relatedAlert.signature}</span>} />
+                                <InfoRow label="Category" value={relatedAlert.category || '—'} />
+                                <InfoRow label="Severity" value={
+                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${sev.bg} ${sev.text} border ${sev.border}`}>
+                                        {sev.label}
+                                    </span>
+                                } />
+                                <InfoRow label="Protocol" value={<code className="text-blue-400">{relatedAlert.protocol}</code>} />
+                                <InfoRow label="Source" value={<code className="text-red-400">{relatedAlert.src_ip}{relatedAlert.src_port ? `:${relatedAlert.src_port}` : ''}</code>} />
+                                <InfoRow label="Destination" value={<code className="text-emerald-400">{relatedAlert.dest_ip}{relatedAlert.dest_port ? `:${relatedAlert.dest_port}` : ''}</code>} />
+                            </Section>
+                        ) : (
+                            <Section title="Triggering Detection" icon={AlertTriangle}>
+                                <div className="py-2 space-y-2">
+                                    <InfoRow label="Signature" value={<span className="text-yellow-300 font-medium">{signatureText}</span>} />
+                                    <InfoRow label="Source IP" value={<code className="text-red-400">{item.ip}</code>} />
+                                    <p className="text-xs text-gray-500 pt-1">Original alert record not found (may have been filtered or was from a previous session).</p>
+                                </div>
+                            </Section>
+                        )}
+
+                        {/* Raw Suricata Event Packet Info */}
+                        {rawEvt && (
+                            <Section title="Raw Suricata Event — Packet Detail" icon={Terminal}>
+                                <div className="space-y-2">
+                                    {rawEvt.alert?.signature_id && <InfoRow label="Signature ID" value={<code className="text-purple-400">SID:{rawEvt.alert.signature_id} rev:{rawEvt.alert.rev}</code>} />}
+                                    {rawEvt.alert?.gid && <InfoRow label="Generator ID" value={`gid:${rawEvt.alert.gid}`} />}
+                                    {rawEvt.flow_id && <InfoRow label="Flow ID" value={<code className="text-blue-400">{rawEvt.flow_id}</code>} />}
+                                    {rawEvt.in_iface && <InfoRow label="Captured Interface" value={<code className="text-emerald-400">{rawEvt.in_iface}</code>} />}
+                                    {rawEvt.app_proto && <InfoRow label="App Protocol" value={rawEvt.app_proto.toUpperCase()} />}
+                                    {rawEvt.payload && (
+                                        <div className="pt-2">
+                                            <p className="text-xs text-gray-500 mb-1">Payload (base64)</p>
+                                            <div className="bg-[#0a0a0a] p-2 rounded border border-white/5 font-mono text-[10px] text-gray-400 max-h-24 overflow-auto break-all">
+                                                {rawEvt.payload}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {rawEvt.payload_printable && (
+                                        <div className="pt-2">
+                                            <p className="text-xs text-gray-500 mb-1">Payload (readable)</p>
+                                            <div className="bg-[#0a0a0a] p-2 rounded border border-emerald-500/10 font-mono text-[11px] text-emerald-400 max-h-32 overflow-auto break-words whitespace-pre-wrap">
+                                                {rawEvt.payload_printable}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {rawEvt.http && (
+                                        <div className="pt-2 space-y-1">
+                                            <p className="text-xs text-gray-500">HTTP Context</p>
+                                            {rawEvt.http.url && <InfoRow label="URL" value={<span className="text-orange-400 font-mono text-xs">{rawEvt.http.url}</span>} />}
+                                            {rawEvt.http.http_method && <InfoRow label="Method" value={rawEvt.http.http_method} />}
+                                            {rawEvt.http.http_user_agent && <InfoRow label="User-Agent" value={<span className="text-xs">{rawEvt.http.http_user_agent}</span>} />}
+                                        </div>
+                                    )}
+                                    {rawEvt.tls && (
+                                        <div className="pt-2 space-y-1">
+                                            <p className="text-xs text-gray-500">TLS Context</p>
+                                            {rawEvt.tls.sni && <InfoRow label="SNI" value={<code className="text-yellow-400">{rawEvt.tls.sni}</code>} />}
+                                            {rawEvt.tls.version && <InfoRow label="TLS Version" value={rawEvt.tls.version} />}
+                                        </div>
+                                    )}
+                                </div>
+                            </Section>
+                        )}
+
                         {/* Actions */}
                         <div className="pt-2 border-t border-white/5 flex justify-end gap-3">
-                            <button
-                                onClick={onClose}
-                                className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors"
-                            >
+                            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors">
                                 Close
                             </button>
                             <button
-                                onClick={() => {
-                                    onUnblock(item.ip);
-                                    onClose();
-                                }}
+                                onClick={() => { onUnblock(item.ip); onClose(); }}
                                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-colors font-medium"
                             >
                                 <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"></span>

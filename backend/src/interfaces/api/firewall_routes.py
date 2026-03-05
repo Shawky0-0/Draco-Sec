@@ -78,17 +78,21 @@ async def get_blocked_ips(db: Session = Depends(get_db)):
     Get list of currently blocked IPs from Database
     """
     try:
-        # Fetch active blocks from DB
+        # Fetch active blocks from DB, grouped by IP to avoid duplicates
         blocked_records = db.query(BlockedIP).filter(BlockedIP.active == 1).order_by(BlockedIP.blocked_at.desc()).all()
         
-        blocked_ips = []
+        # Deduplicate by IP
+        unique_ips = {}
         for record in blocked_records:
-            blocked_ips.append({
-                "ip": record.ip_address,
-                "reason": record.reason,
-                "blocked_at": record.blocked_at.isoformat() if record.blocked_at else None,
-                "source": "Manual Block" # Ideally differentiate between Manual and Active Response in reason?
-            })
+            if record.ip_address not in unique_ips:
+                unique_ips[record.ip_address] = {
+                    "ip": record.ip_address,
+                    "reason": record.reason,
+                    "blocked_at": record.blocked_at.isoformat() if record.blocked_at else None,
+                    "source": "Manual Block" if "Manual" in record.reason else "Active Response"
+                }
+        
+        blocked_ips = list(unique_ips.values())
         
         return {
             "success": True,

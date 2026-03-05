@@ -20,9 +20,11 @@ import signOutIcon from '../../assets/sign-out.svg';
 
 export const Sidebar = () => {
     const { mode } = useDashboard();
-    const { logout } = useAuth();
+    const { logout, user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
+
+    const isEnterprise = user?.plan === 'Enterprise';
 
     // Style variables based on mode for the custom gradient border effect
     const borderColor = mode === 'offensive' ? 'rgba(255, 0, 51, 0.5)' : 'rgba(0, 255, 255, 0.5)';
@@ -43,7 +45,8 @@ export const Sidebar = () => {
         { to: "/draco-ai", icon: botIcon, label: "Draco AI" },
     ];
 
-    const links = mode === 'offensive' ? offensiveLinks : defensiveLinks;
+    // Non-Enterprise users only get offensive links, regardless of mode
+    const links = (isEnterprise && mode === 'defensive') ? defensiveLinks : offensiveLinks;
 
     return (
         <aside
@@ -114,14 +117,15 @@ export const Sidebar = () => {
                 <button
                     onClick={logout}
                     title="Sign Out"
-                    className="flex items-center justify-center p-2 rounded-lg text-[#a0a0a0] hover:text-white hover:bg-white/5 transition-all relative group"
+                    className="flex items-center justify-center p-2 rounded-lg text-red-500/70 hover:text-red-400 hover:bg-red-500/10 transition-all relative group"
                 >
                     <img
                         src={signOutIcon}
                         alt="Sign Out"
-                        className="w-[20px] h-[20px] object-contain opacity-70 group-hover:opacity-100 invert-[0.7]"
+                        className="w-[20px] h-[20px] object-contain opacity-80 group-hover:opacity-100 transition-all"
+                        style={{ filter: 'brightness(0) saturate(100%) invert(20%) sepia(100%) saturate(5000%) hue-rotate(0deg) brightness(1)' }}
                     />
-                    <span className="absolute left-full ml-4 px-3 py-2 bg-[#1e1e1e]/95 border border-[#78808e]/20 rounded-md text-white text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transform -translate-x-2 group-hover:translate-x-0 transition-all duration-200 z-50 pointer-events-none shadow-lg">
+                    <span className="absolute left-full ml-4 px-3 py-2 bg-[#1e1e1e]/95 border border-red-500/20 rounded-md text-red-400 text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transform -translate-x-2 group-hover:translate-x-0 transition-all duration-200 z-50 pointer-events-none shadow-lg">
                         Sign Out
                     </span>
                 </button>

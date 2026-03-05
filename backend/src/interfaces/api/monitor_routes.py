@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from sqlalchemy import func, text
 from datetime import datetime, timedelta
 import json
+from src.infrastructure.models import NetworkDevice
+from src.use_cases.discovery_service import discovery_service
 
 router = APIRouter(prefix="/monitor", tags=["monitoring"])
 
@@ -247,6 +249,34 @@ async def get_alert_timeline(hours: int = 24, db: Session = Depends(get_db)):
     
     return sorted([{"time": k, **v} for k, v in timeline.items()], key=lambda x: x['time'])
 
+# ======= Device Discovery Endpoints =======
+
+@router.get("/devices")
+async def get_discovered_devices(db: Session = Depends(get_db)):
+    """Get all discovered devices on the local network."""
+    devices = db.query(NetworkDevice).order_by(NetworkDevice.is_active.desc(), NetworkDevice.last_seen.desc()).all()
+    
+    return [{
+        "id": d.id,
+        "ip_address": d.ip_address,
+        "mac_address": d.mac_address,
+        "hostname": d.hostname,
+        "vendor": d.vendor,
+        "is_active": bool(d.is_active),
+        "first_seen": d.first_seen.isoformat() if d.first_seen else None,
+        "last_seen": d.last_seen.isoformat() if d.last_seen else None
+    } for d in devices]
+
+@router.post("/devices/scan")
+async def trigger_network_scan(db: Session = Depends(get_db)):
+    """Manually trigger an active network discovery scan."""
+    try:
+        # Note: This is a blocking call in this thread. For scale, use Celery/BackgroundTasks.
+        devices = discovery_service.scan_network()
+        return {"success": True, "message": f"Scan complete. Discovered {len(devices)} active devices.", "count": len(devices)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
+
 
 @router.get("/statistics/top_attackers")
 async def get_top_attackers(limit: int = 10, db: Session = Depends(get_db)):
@@ -291,50 +321,58 @@ async def get_mitre_stats(db: Session = Depends(get_db)):
 @router.get("/stats")
 async def get_monitor_stats(db: Session = Depends(get_db)):
     """
-    Aggegated statistics for the monitoring dashboard
+    Aggegated statistics for the monitoring dashboard (excluding false positives)
     """
+    from .monitor_filtering import is_likely_false_positive
     try:
+        # Fetch all alerts within a reasonable timeframe for Python-side filtering
+        # Since we use complex python logic for false positives, we need to filter in memory
+        recent_cutoff = datetime.utcnow() - timedelta(days=7) # Limit to last 7 days for performance
+        all_alerts = db.query(SuricataAlert).filter(SuricataAlert.timestamp >= recent_cutoff).all()
+        
+        filtered_alerts = [a for a in all_alerts if not is_likely_false_positive(a)]
+        
         # 1. Severity Counts
         severity_counts = {
-            "critical": db.query(SuricataAlert).filter(SuricataAlert.severity == 1).count(),
-            "high": db.query(SuricataAlert).filter(SuricataAlert.severity == 2).count(),
-            "medium": db.query(SuricataAlert).filter(SuricataAlert.severity == 3).count(),
-            "low": db.query(SuricataAlert).filter(SuricataAlert.severity == 4).count(),
+            "critical": sum(1 for a in filtered_alerts if a.severity == 1),
+            "high": sum(1 for a in filtered_alerts if a.severity == 2),
+            "medium": sum(1 for a in filtered_alerts if a.severity == 3),
+            "low": sum(1 for a in filtered_alerts if a.severity == 4),
         }
         
         # 2. Top Attackers (Source IPs)
-        top_ips_query = db.query(SuricataAlert.src_ip, func.count(SuricataAlert.id).label('count'))\
-            .group_by(SuricataAlert.src_ip)\
-            .order_by(text('count DESC'))\
-            .limit(10).all()
-            
-        top_attackers = [{"ip": ip, "count": count} for ip, count in top_ips_query]
+        ip_counts = {}
+        for a in filtered_alerts:
+            if a.src_ip:
+                ip_counts[a.src_ip] = ip_counts.get(a.src_ip, 0) + 1
+                
+        # Sort and take top 10
+        top_attackers = [{"ip": ip, "count": count} for ip, count in sorted(ip_counts.items(), key=lambda item: item[1], reverse=True)[:10]]
         
         # 3. Protocol Distribution
-        proto_query = db.query(SuricataAlert.protocol, func.count(SuricataAlert.id).label('count'))\
-            .group_by(SuricataAlert.protocol)\
-            .all()
-        
-        protocol_stats = [{"protocol": p, "count": c} for p, c in proto_query if p]
+        proto_counts = {}
+        for a in filtered_alerts:
+            if a.protocol:
+                proto_counts[a.protocol] = proto_counts.get(a.protocol, 0) + 1
+        protocol_stats = [{"protocol": p, "count": c} for p, c in proto_counts.items()]
 
         # 4. Alert Timeline (Last 24h)
         last_24h = datetime.utcnow() - timedelta(hours=24)
-        timeline_query = db.query(
-            func.strftime('%Y-%m-%d %H:00:00', SuricataAlert.timestamp).label('hour'),
-            func.count(SuricataAlert.id)
-        ).filter(SuricataAlert.timestamp >= last_24h)\
-        .group_by('hour')\
-        .order_by('hour').all()
+        timeline_counts = {}
+        for a in filtered_alerts:
+            if a.timestamp >= last_24h:
+                hour_key = a.timestamp.strftime('%Y-%m-%d %H:00:00')
+                timeline_counts[hour_key] = timeline_counts.get(hour_key, 0) + 1
+                
+        timeline = [{"time": t, "count": c} for t, c in sorted(timeline_counts.items())]
         
-        timeline = [{"time": t, "count": c} for t, c in timeline_query]
-        
-        # 5. MITRE Techniques
-        mitre_query = db.query(SuricataAlert.category, func.count(SuricataAlert.id).label('count'))\
-            .group_by(SuricataAlert.category)\
-            .order_by(text('count DESC'))\
-            .limit(10).all()
-            
-        mitre_stats = [{"technique": cat, "count": count} for cat, count in mitre_query if cat]
+        # 5. MITRE Techniques (Using Category for now as placeholder)
+        cat_counts = {}
+        for a in filtered_alerts:
+            if a.category:
+                cat_counts[a.category] = cat_counts.get(a.category, 0) + 1
+                
+        mitre_stats = [{"technique": cat, "count": count} for cat, count in sorted(cat_counts.items(), key=lambda item: item[1], reverse=True)[:10]]
 
         return {
             "severity_counts": severity_counts,
