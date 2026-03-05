@@ -22,15 +22,15 @@ const PhishingPage = () => {
     return (
         <div className="flex flex-col h-full gap-6">
             {/* Header / Tabs */}
-            <div className="flex items-center gap-1 bg-[#0a0a0a]/40 p-1.5 rounded-xl border border-white/5 w-max">
+            <div className="bg-[#0a0a0a]/40 p-1.5 rounded-xl border border-white/5 flex gap-1 w-max">
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
                         className={`
-                            flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300
+                            flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300
                             ${activeTab === tab.id
-                                ? 'bg-[#1a1a1a] text-white shadow-[0_0_15px_rgba(0,255,170,0.1)] border border-white/10'
+                                ? 'bg-[#1a1a1a] text-white shadow-[0_0_15px_rgba(0,255,170,0.05)] border border-white/10'
                                 : 'text-gray-400 hover:text-white hover:bg-white/5'
                             }
                         `}

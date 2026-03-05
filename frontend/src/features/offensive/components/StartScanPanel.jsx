@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Target, Settings, FileText, Trash2 } from 'lucide-react';
+import { X, Plus, Target, Settings, FileText, Trash2, Loader2 } from 'lucide-react';
 import { createScan, listMethodologies, createMethodology, deleteMethodology } from '../../../services/offensiveService';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
@@ -186,7 +186,7 @@ const StartScanPanel = ({ onClose, onScanStarted }) => {
                         >
                             {loading ? (
                                 <>
-                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                    <Loader2 className="animate-spin" size={20} />
                                     Starting...
                                 </>
                             ) : (

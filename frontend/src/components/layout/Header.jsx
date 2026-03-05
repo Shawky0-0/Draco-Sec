@@ -32,15 +32,15 @@ export const Header = ({ title = "Dashboard" }) => {
         const titles = {
             '/offensive/dashboard': 'Offensive Dashboard',
             '/offensive/agent-feed': 'Agent Feed',
+            '/offensive/bugs': 'Bugs',
             '/offensive/issues': 'Issues',
             '/offensive/reports': 'Reports',
-            '/offensive/draco-ai': 'Draco AI',
+            '/draco-ai': 'Draco AI',
 
             '/defensive/dashboard': 'Defensive Dashboard',
             '/defensive/monitoring': 'Monitoring',
             '/defensive/scans': 'Scans',
-            '/defensive/phishing-campaigns': 'Phishing Campaigns',
-            '/defensive/draco-ai': 'Draco AI'
+            '/defensive/phishing-campaigns': 'Phishing Campaigns'
         };
 
         return titles[path] || title; // Fallback to prop or default "Dashboard"
@@ -105,7 +105,7 @@ export const Header = ({ title = "Dashboard" }) => {
                     </div>
 
                     {/* Right: Actions */}
-                    <div className="justify-self-end mb-1 min-w-[140px] flex justify-end">
+                    <div className="justify-self-end min-w-[140px] flex justify-end">
                         {location.pathname === '/offensive/dashboard' && (
                             <button
                                 onClick={() => setShowStartPanel(true)}

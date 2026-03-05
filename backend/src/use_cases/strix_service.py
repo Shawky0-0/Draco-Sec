@@ -262,7 +262,8 @@ class StrixService:
 
             run_name = f"dracosec_{scan_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-            # Map methodology → Strix scan_mode
+            # Map methodology name → Strix scan_mode
+            # Also handles custom methodologies via keyword matching
             mode_map = {
                 "Quick Scan": "quick",
                 "Standard": "standard",
@@ -270,9 +271,23 @@ class StrixService:
                 "Blackbox": "deep",
                 "Whitebox": "deep",
                 "Web Application": "deep",
+                "Web Application Pentest": "deep",
                 "API Security": "deep",
+                "API Security Testing": "deep",
+                "Network Pentest": "deep",
+                "OWASP Top 10": "deep",
             }
-            scan_mode = mode_map.get(methodology, "standard")
+            scan_mode = mode_map.get(methodology, None)
+            if not scan_mode:
+                # Keyword fallback for custom methodologies
+                ml = methodology.lower()
+                if any(k in ml for k in ["quick", "fast", "recon"]):
+                    scan_mode = "quick"
+                elif any(k in ml for k in ["deep", "full", "pentest", "api", "network", "blackbox", "whitebox", "owasp"]):
+                    scan_mode = "deep"
+                else:
+                    scan_mode = "standard"
+
             llm_config = LLMConfig(scan_mode=scan_mode)
 
             agent_config = {
@@ -289,10 +304,28 @@ class StrixService:
             else:
                 target_data = {"type": "web_application", "details": {"target_url": target}}
 
+            # ── Build user_instructions: inject methodology description ──────────
+            # Load the methodology description from the DB so Strix knows
+            # exactly what the operator intends this scan to focus on.
+            from ..infrastructure.models import ScanMethodology
+            methodology_obj = db.query(ScanMethodology).filter(
+                ScanMethodology.title == methodology
+            ).first()
+            methodology_instructions = ""
+            if methodology_obj and methodology_obj.description:
+                methodology_instructions = (
+                    f"## Operator-Defined Methodology: {methodology_obj.title}\n"
+                    f"{methodology_obj.description.strip()}\n\n"
+                    f"Follow the above methodology strictly when deciding which vulnerabilities "
+                    f"to test and in what order.\n\n"
+                )
+            base_instructions = scope.strip() if scope else ""
+            combined_instructions = methodology_instructions + base_instructions
+
             scan_config = {
                 "scan_id": run_name,
                 "targets": [target_data],
-                "user_instructions": scope or "",
+                "user_instructions": combined_instructions,
                 "run_name": run_name,
                 "max_iterations": 300,
             }
@@ -330,7 +363,7 @@ class StrixService:
                 "success": True,
                 "scan_id": scan_id,
                 "status": "running",
-                "message": "Strix Agent started (Native Mode)",
+                "message": "Draco Agent started (Native Mode)",
             }
 
         except Exception as e:
@@ -383,13 +416,25 @@ class StrixService:
                 del self.active_scans[scan_id]
 
     def _save_vulnerability(self, scan_id: int, title: str, content: str, severity: str, poc: str):
-        """Save vulnerability found by agent to DB."""
+        """Save vulnerability found by agent to DB — deduplicates by (scan_id, title)."""
         db = SessionLocal()
         try:
+            # ── Deduplicate: skip if same title already saved for this scan ──
+            existing = db.query(Vulnerability).filter(
+                Vulnerability.scan_id == scan_id,
+                Vulnerability.title == title,
+            ).first()
+            if existing:
+                logger.debug(f"Duplicate vulnerability skipped: '{title}' for scan {scan_id}")
+                return
+
+            title_clean = title.replace("Strix", "Draco").replace("strix", "draco")
+            content_clean = content.replace("Strix", "Draco").replace("strix", "draco")
+
             vulnerability = Vulnerability(
                 scan_id=scan_id,
-                title=title,
-                content=content,
+                title=title_clean,
+                content=content_clean,
                 severity=severity.lower(),
                 vulnerability_type="Automated Finding",
                 poc=poc,
@@ -436,6 +481,96 @@ class StrixService:
                 return {"success": True, "message": "Scan was already stopped"}
 
         return {"success": False, "error": "Scan not found"}
+
+    async def graceful_finish_scan(self, scan_id: int, db: Session) -> Dict[str, Any]:
+        """
+        Graceful stop: build a report from all currently-found vulnerabilities,
+        persist it as the final report, mark scan as completed, then cancel the task.
+        The user gets a real, formatted report even if Strix hasn't called finish_scan yet.
+        """
+        from ..infrastructure.models import Vulnerability as VulnModel
+
+        scan = db.query(OffensiveScan).filter(OffensiveScan.id == scan_id).first()
+        if not scan:
+            return {"success": False, "error": "Scan not found"}
+
+        # ── Collect findings already saved ────────────────────────
+        vulns = db.query(VulnModel).filter(VulnModel.scan_id == scan_id).all()
+        sev_order = ["critical", "high", "medium", "low", "info"]
+        vulns_sorted = sorted(vulns, key=lambda v: sev_order.index(v.severity) if v.severity in sev_order else 99)
+
+        # ── Build markdown report ──────────────────────────────────
+        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        lines = [
+            f"# Penetration Test Report — {scan.target}",
+            f"",
+            f"**Generated:** {now}  ",
+            f"**Methodology:** {scan.methodology}  ",
+            f"**Status:** Manually finished by operator  ",
+            f"",
+            f"---",
+            f"",
+            f"## Executive Summary",
+            f"",
+            f"A {scan.methodology} scan was conducted against `{scan.target}`. "
+            f"The scan was manually finalized with **{len(vulns)}** vulnerabilities recorded.",
+            f"",
+            f"| Severity | Count |",
+            f"|----------|-------|",
+            f"| 🔴 Critical | {scan.critical_count} |",
+            f"| 🟠 High     | {scan.high_count} |",
+            f"| 🟡 Medium   | {scan.medium_count} |",
+            f"| 🟢 Low      | {scan.low_count} |",
+            f"",
+            f"---",
+            f"",
+            f"## Findings",
+            f"",
+        ]
+
+        if not vulns:
+            lines.append("*No vulnerabilities recorded at the time of manual finish.*")
+        else:
+            for idx, v in enumerate(vulns_sorted, 1):
+                sev_icon = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}.get(v.severity, "⚪")
+                title_clean = v.title.replace("Strix", "Draco").replace("strix", "draco") if v.title else ""
+                lines += [
+                    f"### {idx}. {sev_icon} {title_clean}",
+                    f"",
+                    f"**Severity:** `{v.severity.upper()}`  ",
+                    f"",
+                ]
+                if v.content:
+                    lines.append(v.content.strip().replace("Strix", "Draco").replace("strix", "draco"))
+                    lines.append("")
+                lines += ["---", ""]
+
+        report_md = "\n".join(lines)
+
+        # ── Persist report & mark completed ───────────────────────
+        scan.final_report_md = report_md
+        scan.status = "completed"
+        scan.completed_at = datetime.utcnow()
+        db.commit()
+
+        # ── Cancel the background task ────────────────────────────
+        if scan_id in self.active_scans:
+            task = self.active_scans[scan_id]
+            task.cancel()
+            del self.active_scans[scan_id]
+        if scan_id in self.tracers:
+            try:
+                self.tracers[scan_id].cleanup()
+            except Exception:
+                pass
+            del self.tracers[scan_id]
+
+        return {
+            "success": True,
+            "message": f"Scan finished gracefully. Report generated with {len(vulns)} findings.",
+            "vulnerabilities": len(vulns),
+        }
+
 
     async def get_scan_status(self, scan_id: int, db: Session) -> Dict[str, Any]:
         """Get scan status."""

@@ -96,12 +96,6 @@ export const ScansPage = () => {
 
     return (
         <div className="flex flex-col gap-8">
-            {/* Header */}
-            <div className="flex flex-col gap-2">
-                <h2 className="text-2xl font-bold text-white">Threat Intelligence Scanner</h2>
-                <p className="text-gray-400">Analyze URLs and files using VirusTotal's malware detection database.</p>
-            </div>
-
             {/* Active Scans Indicator */}
             {activeScans.length > 0 && (
                 <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
@@ -147,30 +141,26 @@ export const ScansPage = () => {
             )}
 
             {/* Tab Selector */}
-            <div className="flex gap-2 border-b border-white/5">
+            <div className="bg-[#0a0a0a]/40 p-1.5 rounded-xl border border-white/5 flex gap-1 w-max">
                 <button
                     onClick={() => setActiveTab('url')}
-                    className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${activeTab === 'url'
-                        ? 'border-emerald-500 text-white'
-                        : 'border-transparent text-gray-400 hover:text-gray-300'
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'url'
+                        ? 'bg-[#1a1a1a] text-white shadow-[0_0_15px_rgba(0,255,170,0.05)] border border-white/10'
+                        : 'text-gray-400 hover:text-white hover:bg-white/5'
                         }`}
                 >
-                    <div className="flex items-center gap-2">
-                        <Globe size={16} />
-                        URL Scanner
-                    </div>
+                    <Globe size={16} className={activeTab === 'url' ? 'text-emerald-400' : ''} />
+                    URL Scanner
                 </button>
                 <button
                     onClick={() => setActiveTab('file')}
-                    className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${activeTab === 'file'
-                        ? 'border-emerald-500 text-white'
-                        : 'border-transparent text-gray-400 hover:text-gray-300'
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'file'
+                        ? 'bg-[#1a1a1a] text-white shadow-[0_0_15px_rgba(0,255,170,0.05)] border border-white/10'
+                        : 'text-gray-400 hover:text-white hover:bg-white/5'
                         }`}
                 >
-                    <div className="flex items-center gap-2">
-                        <FileText size={16} />
-                        File Analyzer
-                    </div>
+                    <FileText size={16} className={activeTab === 'file' ? 'text-emerald-400' : ''} />
+                    File Analyzer
                 </button>
             </div>
 
@@ -292,12 +282,24 @@ const ScanResult = ({ scan, onRemove }) => {
     // Normalize stats (VT uses 'stats' for analysis and 'last_analysis_stats' for file reports)
     const stats = result.stats || result.last_analysis_stats || {};
 
+    // Fallback for target name if missing from scan object (for older cached results)
+    const displayName = scan.target || result.url || result.meaningful_name || result.names?.[0] || 'Unknown Target';
+
+    // Fallback for scan type detection
+    const displayType = scan.type || (displayName.startsWith('http') ? 'url' : 'file');
+
     return (
         <div className="bg-[#1a1a1a]/60 backdrop-blur-md border border-white/5 rounded-2xl p-6">
             <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-2 text-sm text-gray-400">
-                    <Clock size={14} />
-                    <span>{new Date(scan.completedAt).toLocaleString()}</span>
+                <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                        {displayType === 'url' ? <Globe size={16} className="text-blue-400" /> : <FileText size={16} className="text-purple-400" />}
+                        <span className="text-white font-mono font-medium">{displayName}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <Clock size={12} />
+                        <span>{new Date(scan.completedAt).toLocaleString()}</span>
+                    </div>
                 </div>
                 <button onClick={onRemove} className="text-gray-500 hover:text-gray-300">
                     <XCircle size={18} />

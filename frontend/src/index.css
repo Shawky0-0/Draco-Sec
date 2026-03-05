@@ -19,3 +19,29 @@ body {
 body[data-mode="offensive"] {
   /* Tailwind handles most, but we can keep global mode variables if needed */
 }
+
+/* ─────────────────────────────────────────────
+   Global Custom Scrollbars (Dark Premium Glassmorphism)
+───────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4); /* Tailwind slate-900 with low opacity */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(51, 65, 85, 0.6); /* Tailwind slate-700 with opacity */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.8); /* Tailwind slate-600 */
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

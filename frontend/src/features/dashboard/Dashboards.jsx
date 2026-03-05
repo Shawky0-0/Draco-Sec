@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import {
     Shield, ShieldAlert, FileSearch, Network, Users,
-    Activity, ArrowUpRight, AlertTriangle, CheckCircle
+    Activity, ArrowUpRight, AlertTriangle, CheckCircle, Loader2
 } from 'lucide-react';
 import API_BASE_URL from "../../config/api";
 
@@ -94,7 +94,7 @@ export const DefensiveDashboard = () => {
     if (isLoading || !stats.monitor) {
         return (
             <div className="flex h-full items-center justify-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400"></div>
+                <Loader2 className="animate-spin text-emerald-400" size={32} />
             </div>
         );
     }
@@ -118,20 +118,7 @@ export const DefensiveDashboard = () => {
     return (
         <div className="flex flex-col gap-6 h-full text-white overflow-y-auto pr-2 pb-6">
 
-            {/* Header Area */}
-            <div className="flex justify-between items-end mb-2">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Global Defensive Analytics</h1>
-                    <p className="text-sm text-gray-400 mt-1">Unified threat overview across Network, Scans, and Phishing vectors.</p>
-                </div>
-                <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-lg">
-                    <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
-                    <span className="text-xs font-medium text-emerald-400 tracking-wide uppercase">Live Status</span>
-                </div>
-            </div>
+            {/* Header Area removed */}
 
             {/* Top Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -171,7 +158,7 @@ export const DefensiveDashboard = () => {
                 {/* Network Trends (Spans 2 columns) */}
                 <div className="xl:col-span-2 bg-[#1a1a1a]/60 border border-white/5 rounded-2xl p-6 flex flex-col">
                     <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-base font-semibold text-gray-200 flex items-center gap-2">
+                        <h3 className="text-xl font-bold text-white flex items-center gap-2">
                             <Activity size={16} className="text-emerald-400" />
                             Network Threat Volume (24h)
                         </h3>
@@ -199,7 +186,7 @@ export const DefensiveDashboard = () => {
 
                 {/* Scan Distribution */}
                 <div className="bg-[#1a1a1a]/60 border border-white/5 rounded-2xl p-6 flex flex-col">
-                    <h3 className="text-base font-semibold text-gray-200 flex items-center gap-2 mb-6">
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2 mb-6">
                         <FileSearch size={16} className="text-blue-400" />
                         URL & File Scans
                     </h3>
@@ -250,7 +237,7 @@ export const DefensiveDashboard = () => {
 
                 {/* Alert Categories */}
                 <div className="bg-[#1a1a1a]/60 border border-white/5 rounded-2xl p-6 flex flex-col">
-                    <h3 className="text-base font-semibold text-gray-200 flex items-center gap-2 mb-1">
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2 mb-1">
                         <Network size={16} className="text-amber-400" />
                         Alert Categories
                     </h3>
@@ -282,11 +269,11 @@ export const DefensiveDashboard = () => {
                     <div className="flex flex-col gap-4">
                         <div className="p-4 rounded-xl bg-white/5 border border-white/5">
                             <div className="flex justify-between items-center mb-2">
-                                <span className="text-sm text-gray-400 flex items-center gap-2"><CheckCircle size={14} /> Emails Sent</span>
-                                <span className="font-bold">{phishing?.total_emails_sent || 0}</span>
+                                <span className="text-sm text-gray-400 flex items-center gap-2"><Activity size={14} className="text-blue-400" /> Active Campaigns</span>
+                                <span className="font-bold text-blue-400">{phishing?.active_campaigns || 0}</span>
                             </div>
                             <div className="w-full bg-white/5 rounded-full h-1.5">
-                                <div className="bg-indigo-500 h-1.5 rounded-full" style={{ width: '100%' }}></div>
+                                <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${Math.min(((phishing?.active_campaigns || 0) / (phishing?.total_campaigns || 1)) * 100, 100)}%` }}></div>
                             </div>
                         </div>
 

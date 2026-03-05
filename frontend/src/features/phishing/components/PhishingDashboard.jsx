@@ -5,19 +5,19 @@ import { useNavigate } from 'react-router-dom';
 import { DeleteConfirmationModal } from './modals/DeleteConfirmationModal';
 
 // StatCard Component
-const StatCard = ({ title, value, icon: Icon, color, subtext }) => (
-    <div className="bg-[#1a1a1a]/60 backdrop-blur-md border border-white/5 p-6 rounded-2xl relative overflow-hidden group hover:border-white/10 transition-all duration-300">
-        <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity duration-300 ${color}`}>
-            <Icon size={64} />
-        </div>
-        <div className="relative z-10 flex flex-col gap-4">
-            <div className={`p-3 rounded-lg w-max ${color} bg-opacity-10`}>
-                <Icon size={24} className={color.replace('text-', '')} />
-            </div>
+const StatCard = ({ title, value, icon: Icon, colorClass, subtext }) => (
+    <div className="bg-[#1a1a1a]/60 border border-white/5 rounded-2xl p-6 relative overflow-hidden group hover:border-white/10 transition-colors">
+        <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full blur-2xl opacity-20 group-hover:opacity-30 transition-opacity ${colorClass.bg}`}></div>
+        <div className="relative z-10 flex justify-between items-start">
             <div>
-                <h3 className="text-gray-400 text-sm font-medium">{title}</h3>
-                <p className="text-3xl font-bold text-white mt-1">{value}</p>
+                <p className="text-gray-400 text-sm font-medium mb-1">{title}</p>
+                <div className="flex items-end gap-3">
+                    <h3 className="text-3xl font-bold text-white tracking-tight">{value}</h3>
+                </div>
                 {subtext && <p className="text-xs text-gray-500 mt-2">{subtext}</p>}
+            </div>
+            <div className={`p-3 rounded-xl border ${colorClass.iconBg} ${colorClass.border}`}>
+                <Icon size={20} className={colorClass.text} />
             </div>
         </div>
     </div>
@@ -94,38 +94,34 @@ export const PhishingDashboard = () => {
 
     return (
         <div className="flex flex-col gap-8">
-            <div className="flex flex-col gap-2">
-                <h2 className="text-2xl font-bold text-white">Campaign Overview</h2>
-                <p className="text-gray-400">Real-time metrics from your active phishing simulations.</p>
-            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard
                     title="Total Campaigns"
                     value={safeStats.total_campaigns}
                     icon={Activity}
-                    color="text-blue-400"
-                    subtext={`${safeStats.active_campaigns} currently active`}
+                    colorClass={{ bg: 'bg-blue-500', iconBg: 'bg-blue-500/10', border: 'border-blue-500/20', text: 'text-blue-400' }}
+                    subtext="Historical training data"
                 />
                 <StatCard
-                    title="Emails Sent"
-                    value={safeStats.emails_sent}
+                    title="Active Campaigns"
+                    value={safeStats.active_campaigns}
                     icon={Send}
-                    color="text-emerald-400"
-                    subtext="Successfully delivered"
+                    colorClass={{ bg: 'bg-emerald-500', iconBg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' }}
+                    subtext="Currently running simulations"
                 />
                 <StatCard
                     title="Clicks Captured"
                     value={safeStats.clicked}
                     icon={MousePointer}
-                    color="text-amber-400"
+                    colorClass={{ bg: 'bg-amber-500', iconBg: 'bg-amber-500/10', border: 'border-amber-500/20', text: 'text-amber-400' }}
                     subtext="Link clicks recorded"
                 />
                 <StatCard
                     title="Compromised"
                     value={safeStats.submitted || 0}
                     icon={AlertTriangle}
-                    color="text-red-400"
+                    colorClass={{ bg: 'bg-rose-500', iconBg: 'bg-rose-500/10', border: 'border-rose-500/20', text: 'text-rose-400' }}
                     subtext="Credentials submitted"
                 />
             </div>
@@ -133,7 +129,7 @@ export const PhishingDashboard = () => {
             {/* Recent Campaigns Table */}
             <div className="flex flex-col gap-6">
                 <div className="flex items-center justify-between">
-                    <h2 className="text-2xl font-bold text-white">Recent Campaigns</h2>
+                    <h2 className="text-xl font-bold text-white">Recent Campaigns</h2>
                     <button
                         className="bg-emerald-500 hover:bg-emerald-400 text-white font-medium px-4 py-2 rounded-lg transition-colors"
                     >
@@ -143,7 +139,7 @@ export const PhishingDashboard = () => {
 
                 <div className="bg-[#1a1a1a]/60 backdrop-blur-md border border-white/5 rounded-2xl overflow-hidden">
                     <table className="w-full text-left text-sm text-gray-400">
-                        <thead className="bg-white/5 text-xs uppercase font-medium text-gray-300">
+                        <thead className="bg-white/5 text-xs uppercase font-medium text-gray-400 tracking-wider">
                             <tr>
                                 <th className="px-6 py-4">Name</th>
                                 <th className="px-6 py-4">Created Date</th>

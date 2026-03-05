@@ -29,8 +29,10 @@ import {
     Code2,
     Send,
     Layers,
+    X,
+    FileText,
 } from 'lucide-react';
-import { getScan, connectToAgentFeed, stopScan } from '../../services/offensiveService';
+import { getScan, connectToAgentFeed, stopScan, finishScan } from '../../services/offensiveService';
 
 /* ─────────────────────────────────────────────
    Helpers
@@ -43,6 +45,12 @@ const stripThinkTags = (text) => {
         .replace(/<\/?think>/gi, '')
         .trim();
     return { clean, hadThink };
+};
+
+// Replace [STRIX_N]$ terminal prompts with a neutral label users see
+const maskStrixRefs = (text) => {
+    if (!text) return text;
+    return text.replace(/\[STRIX_\d+\]\$/g, '[draco]$');
 };
 
 const tryParseJson = (str) => {
@@ -59,10 +67,11 @@ const AgentFeedPage = () => {
     const [scan, setScan] = useState(null);
     const [events, setEvents] = useState([]);
     const [scanStatus, setScanStatus] = useState('running');
-    const [stats, setStats] = useState({ runtime: 0, toolsUsed: 0, vulnsFound: 0, agentsCount: 1, inputTokens: 0, outputTokens: 0, cost: 0.0 });
+    const [stats, setStats] = useState({ toolsUsed: 0, agentsCount: 1, inputTokens: 0, outputTokens: 0 });
     const [agents, setAgents] = useState({});
     // null = show all events (like Strix's no-agent-selected or overview)
     const [selectedAgentId, setSelectedAgentId] = useState(null);
+    const [selectedVuln, setSelectedVuln] = useState(null);
 
     const terminalEndRef = useRef(null);
     const eventSourceRef = useRef(null);
@@ -72,11 +81,13 @@ const AgentFeedPage = () => {
     useEffect(() => {
         loadScan();
         connectToFeed();
+
+        // Force re-render every second to update the runtime clock
         const interval = setInterval(() => {
-            setScanStatus(prev => { if (prev === 'running') setStats(s => ({ ...s, runtime: s.runtime + 1 })); return prev; });
+            if (scanStatus === 'running') setEvents(e => [...e]);
         }, 1000);
         return () => { clearInterval(interval); if (eventSourceRef.current) eventSourceRef.current.close(); };
-    }, [scanId]);
+    }, [scanId, scanStatus]);
 
     // When agent changes, reset scroll to bottom
     useEffect(() => { setShouldAutoScroll(true); }, [selectedAgentId]);
@@ -135,14 +146,12 @@ const AgentFeedPage = () => {
                 break;
             case 'tool_start':
                 setStats(prev => ({ ...prev, toolsUsed: prev.toolsUsed + 1 }));
-                if (content.tool === 'create_vulnerability_report') setStats(prev => ({ ...prev, vulnsFound: prev.vulnsFound + 1 }));
                 break;
             case 'stats':
                 setStats(prev => ({
                     ...prev,
                     inputTokens: content?.total?.input_tokens ?? prev.inputTokens,
                     outputTokens: content?.total?.output_tokens ?? prev.outputTokens,
-                    cost: content?.total?.cost ?? prev.cost,
                     agentsCount: content?.agents_count ?? prev.agentsCount,
                     toolsUsed: content?.tools_count ?? prev.toolsUsed,
                 }));
@@ -154,16 +163,51 @@ const AgentFeedPage = () => {
     const handleComplete = (status) => { setScanStatus(status); loadScan(); };
 
     const handleStopScan = async () => {
-        if (!confirm('Are you sure you want to stop this scan?')) return;
+        if (!confirm('Are you sure you want to stop this scan? No report will be generated.')) return;
         try { await stopScan(scanId); setScanStatus('stopped'); }
         catch (err) { console.error('Failed to stop scan:', err); }
     };
 
-    const formatTime = (s) => `${Math.floor(s / 60)}m ${s % 60}s`;
+    const handleFinishScan = async () => {
+        if (!confirm('Finish now? Draco Agent will stop and a report will be generated from all findings so far.')) return;
+        try {
+            await finishScan(scanId);
+            setScanStatus('completed');
+            if (eventSourceRef.current) eventSourceRef.current.close();
+        }
+        catch (err) { console.error('Failed to finish scan:', err); }
+    };
+
+    const formatTime = (s) => {
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        if (h > 0) return `${h}h ${m}m ${sec}s`;
+        return `${m}m ${sec}s`;
+    };
+
+    // Calculate actual runtime from backend timestamps
+    const getActualRuntime = () => {
+        if (!scan?.started_at) return 0;
+        const start = new Date(scan.started_at + 'Z').getTime();
+        const end = scan?.completed_at
+            ? new Date(scan.completed_at + 'Z').getTime()
+            : Date.now();
+        return Math.floor(Math.max(0, (end - start) / 1000));
+    };
 
     // Filter events by selected agent (or show all if null)
+    // Only show agent_created events for children of the selected agent (or root agents if none selected)
     const visibleEvents = selectedAgentId
-        ? events.filter(e => e.agent_id === selectedAgentId || e.type === 'agent_created')
+        ? events.filter(e => {
+            if (e.agent_id === selectedAgentId) return true;
+            if (e.type === 'agent_created') {
+                let c = e.content;
+                try { if (typeof c === 'string') c = JSON.parse(c); } catch { }
+                return c?.parent_id === selectedAgentId;
+            }
+            return false;
+        })
         : events;
 
     const vulnEvents = events.filter(e => {
@@ -184,18 +228,18 @@ const AgentFeedPage = () => {
             : 'bg-red-500/20 border-red-500 text-red-400';
 
     return (
-        <div className="min-h-screen bg-black text-gray-300 font-mono flex flex-col h-screen overflow-hidden">
+        <div className="-mx-7 -my-5 bg-black text-gray-300 font-mono flex flex-col overflow-hidden" style={{ height: 'calc(100vh - 56px)' }}>
 
-            {/* ── Header ── */}
-            <div className="border-b border-gray-800 bg-[#0a0a0a] px-4 py-3 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-4">
+            {/* ── Header: sticky pinned bar ── */}
+            <div className="border-b border-gray-800 bg-[#0a0a0a] px-4 py-3 flex items-center justify-between shrink-0 sticky top-0 z-10 w-full">
+                <div className="flex items-center gap-4 flex-1 min-w-0">
                     <button onClick={() => navigate('/offensive/agent-feed')} className="p-1.5 hover:bg-gray-800 rounded transition-colors text-green-500">
                         <ArrowLeft size={18} />
                     </button>
                     <div>
                         <div className="flex items-center gap-2">
                             <Shield size={15} className="text-green-500" />
-                            <h1 className="text-base font-bold text-white tracking-wider">STRIX <span className="text-green-500">AGENT</span></h1>
+                            <h1 className="text-base font-bold text-white tracking-wider">DRACO <span className="text-green-500">AGENT</span></h1>
                         </div>
                         <div className="text-xs text-gray-500 flex gap-2 mt-0.5">
                             <span>TARGET:</span><span className="text-cyan-400">{scan?.target || '…'}</span>
@@ -205,31 +249,35 @@ const AgentFeedPage = () => {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-5 text-sm">
-                    <TuiStat label="RUNTIME" value={formatTime(stats.runtime)} icon={<Clock size={13} />} />
+                <div className="flex items-center justify-center gap-6 text-sm shrink-0">
+                    <TuiStat label="RUNTIME" value={formatTime(getActualRuntime())} icon={<Clock size={13} />} />
                     <TuiStat label="AGENTS" value={stats.agentsCount} icon={<Cpu size={13} />} color="text-purple-400" />
                     <TuiStat label="TOOLS" value={stats.toolsUsed} icon={<Terminal size={13} />} color="text-yellow-400" />
-                    <TuiStat label="VULNS" value={vulnEvents.length} icon={<Bug size={13} />} color="text-red-400" bold />
+                    <TuiStat label="VULNS" value={scan?.vulnerabilities_found || 0} icon={<Bug size={13} />} color="text-red-400" bold />
                     <TuiStat label="IN" value={stats.inputTokens} icon={<span className="text-[10px]">↓</span>} color="text-gray-400" />
                     <TuiStat label="OUT" value={stats.outputTokens} icon={<span className="text-[10px]">↑</span>} color="text-gray-400" />
-                    <TuiStat label="COST" value={`$${(stats.cost ?? 0).toFixed(4)}`} icon={<DollarSign size={13} />} color="text-green-400" />
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-1 justify-end min-w-0">
                     {scanStatus === 'running' && (
-                        <button onClick={handleStopScan} className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/50 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 transition-all">
-                            <Square size={11} fill="currentColor" /> Stop
-                        </button>
+                        <>
+                            <button onClick={handleFinishScan} className="bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/50 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 transition-all">
+                                <FileText size={11} /> Finish &amp; Report
+                            </button>
+                            <button onClick={handleStopScan} className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/50 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 transition-all">
+                                <Square size={11} fill="currentColor" /> Stop
+                            </button>
+                        </>
                     )}
                     <div className={`px-2 py-1 rounded text-xs font-bold uppercase border ${statusColor} ${scanStatus === 'running' ? 'animate-pulse' : ''}`}>{scanStatus}</div>
                 </div>
             </div>
 
-            {/* ── Main 3-column grid ── */}
-            <div className="flex-1 grid grid-cols-12 overflow-hidden min-h-0">
+            {/* ── Main layout: fixed left | flexible center | fixed right ── */}
+            <div className="flex-1 flex overflow-hidden min-h-0">
 
-                {/* Left: Agent Tree — clickable like Strix */}
-                <div className="col-span-2 border-r border-gray-800 bg-[#050505] flex flex-col min-h-0">
+                {/* Left: Agent Tree */}
+                <div className="w-80 shrink-0 border-r border-gray-800 bg-[#050505] flex flex-col min-h-0">
                     <PanelHeader icon={<Box size={11} />} label="Agents" />
                     <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-0">
 
@@ -237,8 +285,8 @@ const AgentFeedPage = () => {
                         <button
                             onClick={() => setSelectedAgentId(null)}
                             className={`w-full text-left px-2 py-1.5 rounded text-[11px] flex items-center gap-2 transition-colors ${selectedAgentId === null
-                                    ? 'bg-gray-700/60 text-white border border-gray-600'
-                                    : 'text-gray-500 hover:bg-gray-800/40 hover:text-gray-300'
+                                ? 'bg-gray-700/60 text-white border border-gray-600'
+                                : 'text-gray-500 hover:bg-gray-800/40 hover:text-gray-300'
                                 }`}
                         >
                             <Layers size={11} className={selectedAgentId === null ? 'text-green-400' : 'text-gray-600'} />
@@ -271,7 +319,7 @@ const AgentFeedPage = () => {
                 </div>
 
                 {/* Center: Live feed */}
-                <div className="col-span-7 flex flex-col border-r border-gray-800 min-h-0">
+                <div className="flex-1 flex flex-col border-r border-gray-800 min-h-0">
                     {/* Sub-header showing which agent is selected */}
                     <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-800 bg-gray-900/30 shrink-0">
                         <div className="flex items-center gap-2">
@@ -307,7 +355,7 @@ const AgentFeedPage = () => {
                 </div>
 
                 {/* Right: Findings */}
-                <div className="col-span-3 bg-[#050505] flex flex-col min-h-0">
+                <div className="w-72 shrink-0 bg-[#050505] flex flex-col min-h-0">
                     <PanelHeader icon={<Bug size={11} />} label={`Findings (${vulnEvents.length})`} />
                     <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
                         {vulnEvents.length === 0
@@ -315,12 +363,36 @@ const AgentFeedPage = () => {
                             : vulnEvents.map((e, i) => {
                                 let c = e.content;
                                 try { if (typeof c === 'string') c = JSON.parse(c); } catch { }
-                                return <VulnCard key={i} args={c?.args || {}} />;
+                                return <VulnCard key={i} args={c?.args || {}} onClick={() => setSelectedVuln(c?.args || {})} />;
                             })
                         }
                     </div>
                 </div>
             </div>
+
+            {/* ── Modal for Vuln Detail ── */}
+            {selectedVuln && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="bg-[#0a0a0a] border border-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+                        <div className="px-5 py-3 border-b border-gray-800 flex items-center justify-between bg-black">
+                            <div className="flex items-center gap-3">
+                                <Bug className="text-red-500" size={16} />
+                                <h2 className="text-gray-200 font-bold text-sm">Vulnerability Report</h2>
+                            </div>
+                            <button onClick={() => setSelectedVuln(null)} className="text-gray-500 hover:text-white transition-colors">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-6 bg-[#050505]">
+                            <div className="mb-5 flex items-center gap-3 flex-wrap">
+                                <SeverityBadge severity={selectedVuln.severity} />
+                                <h1 className="text-xl font-bold text-white leading-snug flex-1">{selectedVuln.title || 'Unnamed Vulnerability'}</h1>
+                            </div>
+                            <ModalMarkdown text={selectedVuln.content || 'No details provided.'} />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -329,9 +401,9 @@ const AgentFeedPage = () => {
    Shared small components
 ───────────────────────────────────────────── */
 const TuiStat = ({ label, value, icon, color = 'text-white', bold }) => (
-    <div className="flex flex-col items-center leading-none">
-        <span className="text-[9px] text-gray-600 font-bold mb-0.5 tracking-wider">{label}</span>
-        <div className={`flex items-center gap-1 ${color} ${bold ? 'font-bold' : ''} text-xs`}>{icon}<span>{value}</span></div>
+    <div className="flex flex-col items-center justify-center min-w-[50px] leading-none">
+        <span className="text-[9px] text-gray-500 font-bold mb-1 tracking-widest">{label}</span>
+        <div className={`flex items-center justify-center gap-1.5 ${color} ${bold ? 'font-bold' : ''} text-xs`}>{icon}<span>{value}</span></div>
     </div>
 );
 
@@ -342,8 +414,23 @@ const PanelHeader = ({ icon, label }) => (
 );
 
 const AgentStatusDot = ({ status }) => {
-    const cls = { running: 'bg-green-400 animate-pulse', completed: 'bg-blue-400', failed: 'bg-red-400', stopped: 'bg-gray-600' }[status] ?? 'bg-gray-600';
-    return <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cls}`} />;
+    const cls = {
+        running: 'bg-green-400 animate-pulse shadow-green-500/50 shadow-sm',
+        completed: 'bg-blue-400',
+        failed: 'bg-red-400',
+        stopped: 'bg-gray-600',
+    }[status] ?? 'bg-gray-500';
+    return <span className={`w-2 h-2 rounded-full shrink-0 mt-0.5 ${cls}`} />;
+};
+
+/* ─────────────────────────────────────────────
+   Mask internal Strix names — users should only see Draco branding
+───────────────────────────────────────────── */
+const maskAgentName = (name) => {
+    if (!name) return name;
+    return name
+        .replace(/^StrixAgent$/i, 'DracoAgent')
+        .replace(/^Strix\s/i, 'Draco ');
 };
 
 /* ─────────────────────────────────────────────
@@ -353,32 +440,25 @@ const AgentNode = ({ agent, allAgents, depth, selectedAgentId, onSelect, events 
     const children = Object.values(allAgents).filter(a => a.parent_id === agent.id);
     const isSelected = agent.id === selectedAgentId;
     const isRoot = !agent.parent_id;
-
-    // Count events for this agent
     const agentEventCount = events.filter(e => e.agent_id === agent.id && e.type !== 'stats').length;
 
-    const statusEmoji = { running: '🟢', completed: '✅', failed: '❌', stopped: '⏹️' }[agent.status] ?? '🔵';
-
     return (
-        <div style={{ marginLeft: depth * 10 }}>
+        <div>
             <button
                 onClick={() => onSelect(agent.id)}
-                className={`w-full text-left px-1.5 py-1.5 rounded text-[11px] flex items-center gap-2 transition-colors group ${isSelected
-                        ? 'bg-green-500/10 border border-green-500/30 text-green-300'
-                        : 'hover:bg-gray-800/50 text-gray-400 hover:text-gray-200'
+                style={{ paddingLeft: `${8 + depth * 12}px` }}
+                className={`w-full text-left pr-2 py-1.5 rounded flex items-center gap-2 transition-colors group ${isSelected
+                    ? 'bg-green-500/10 border border-green-500/20 text-green-300'
+                    : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200'
                     }`}
             >
-                <span className="text-[11px] shrink-0">{statusEmoji}</span>
-                <span className={`truncate flex-1 ${isRoot ? 'font-bold' : ''}`} title={agent.task}>{agent.name}</span>
+                <AgentStatusDot status={agent.status} />
+                <span className={`flex-1 truncate text-[12px] ${isRoot ? 'font-semibold' : ''}`}>{maskAgentName(agent.name)}</span>
                 {agentEventCount > 0 && (
-                    <span className={`shrink-0 text-[9px] px-1 rounded ${isSelected ? 'bg-green-500/20 text-green-400' : 'bg-gray-800 text-gray-600 group-hover:text-gray-400'}`}>
-                        {agentEventCount}
-                    </span>
+                    <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded font-mono ${isSelected ? 'bg-green-500/20 text-green-400' : 'bg-gray-900 text-gray-600 group-hover:text-gray-400'
+                        }`}>{agentEventCount}</span>
                 )}
             </button>
-            {agent.task && isSelected && (
-                <div className="ml-5 mr-1 mt-0.5 mb-1 text-[9px] text-gray-600 leading-relaxed line-clamp-2 px-1">{agent.task}</div>
-            )}
             {children.map(child => (
                 <AgentNode key={child.id} agent={child} allAgents={allAgents} depth={depth + 1} selectedAgentId={selectedAgentId} onSelect={onSelect} events={events} />
             ))}
@@ -648,7 +728,8 @@ const SmartResultRenderer = ({ result }) => {
     if (parsed?.agent_info || (parsed?.agent_id && parsed?.success !== undefined)) return <AgentSpawnResult data={parsed} />;
     if (parsed?.success === true && parsed?.message && Object.keys(parsed).length <= 4) return <div className="mt-0.5 text-[10px] text-green-600 ml-1">✓ {parsed.message}</div>;
     if (typeof parsed === 'string' && parsed.length <= 5) return null;
-    const text = typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
+    const rawText = typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
+    const text = maskStrixRefs(rawText);
     return <CollapsibleRaw text={text} />;
 };
 
@@ -682,6 +763,74 @@ const StatusEntry = ({ content, ts, agentId }) => {
 };
 
 /* ─────────────────────────────────────────────
+   Modal Markdown renderer (for Vuln detail modal)
+───────────────────────────────────────────── */
+const ModalInlineFmt = ({ text }) => {
+    const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+    return (
+        <>
+            {parts.map((part, i) => {
+                if (part.startsWith('**') && part.endsWith('**'))
+                    return <strong key={i} className="text-white font-semibold">{part.slice(2, -2)}</strong>;
+                if (part.startsWith('`') && part.endsWith('`'))
+                    return <code key={i} className="bg-gray-800 text-green-300 px-1 py-0.5 rounded text-xs font-mono">{part.slice(1, -1)}</code>;
+                return <span key={i}>{part}</span>;
+            })}
+        </>
+    );
+};
+
+const ModalMarkdown = ({ text }) => {
+    if (!text) return null;
+    const lines = text.split('\n');
+    const out = [];
+    let i = 0;
+    while (i < lines.length) {
+        const line = lines[i];
+        if (line.startsWith('# ')) {
+            out.push(<h1 key={i} className="text-xl font-bold text-white mt-6 mb-2 pb-2 border-b border-gray-800">{line.slice(2)}</h1>);
+        } else if (line.startsWith('## ')) {
+            out.push(<h2 key={i} className="text-base font-bold text-gray-200 mt-5 mb-2">{line.slice(3)}</h2>);
+        } else if (line.startsWith('### ')) {
+            out.push(<h3 key={i} className="text-sm font-semibold text-gray-300 mt-4 mb-1">{line.slice(4)}</h3>);
+        } else if (line.startsWith('- ') || line.startsWith('* ')) {
+            out.push(
+                <li key={i} className="ml-5 text-gray-300 text-sm leading-relaxed list-disc mb-0.5">
+                    <ModalInlineFmt text={line.slice(2)} />
+                </li>
+            );
+        } else if (/^\d+\.\s/.test(line)) {
+            out.push(
+                <li key={i} className="ml-5 text-gray-300 text-sm leading-relaxed list-decimal mb-0.5">
+                    <ModalInlineFmt text={line.replace(/^\d+\.\s/, '')} />
+                </li>
+            );
+        } else if (line.startsWith('```')) {
+            const codeLines = [];
+            i++;
+            while (i < lines.length && !lines[i].startsWith('```')) { codeLines.push(lines[i]); i++; }
+            out.push(
+                <pre key={i} className="bg-black/60 border border-gray-800 rounded-lg p-4 overflow-x-auto text-xs font-mono text-green-300 my-3 leading-relaxed whitespace-pre-wrap">
+                    {codeLines.join('\n')}
+                </pre>
+            );
+        } else if (line.startsWith('> ')) {
+            out.push(<blockquote key={i} className="border-l-2 border-gray-600 pl-3 my-2 text-gray-400 italic text-sm">{line.slice(2)}</blockquote>);
+        } else if (line.trim() === '') {
+            out.push(<div key={i} className="h-2" />);
+        } else {
+            out.push(
+                <p key={i} className="text-gray-300 text-sm leading-relaxed my-0.5">
+                    <ModalInlineFmt text={line} />
+                </p>
+            );
+        }
+        i++;
+    }
+    return <div className="space-y-0.5">{out}</div>;
+};
+
+/* ─────────────────────────────────────────────
    Vulnerability panel
 ───────────────────────────────────────────── */
 const SeverityBadge = ({ severity }) => {
@@ -690,9 +839,12 @@ const SeverityBadge = ({ severity }) => {
     return <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${cls}`}>{s || 'unknown'}</span>;
 };
 
-const VulnCard = ({ args }) => (
-    <div className="bg-gray-900 border border-red-500/20 p-2.5 rounded hover:bg-gray-800 transition-colors">
-        <div className="mb-1"><SeverityBadge severity={args.severity} /></div>
+const VulnCard = ({ args, onClick }) => (
+    <div onClick={onClick} className="bg-gray-900 border border-red-500/20 p-2.5 rounded hover:bg-gray-800 transition-colors cursor-pointer group">
+        <div className="mb-1 flex justify-between items-center">
+            <SeverityBadge severity={args.severity} />
+            <span className="opacity-0 group-hover:opacity-100 text-[9px] text-gray-500 transition-opacity">View Details</span>
+        </div>
         <div className="text-xs font-bold text-gray-200 leading-tight mb-1">{args.title ?? 'Unnamed Vulnerability'}</div>
         {args.content && <div className="text-[10px] text-gray-500 leading-relaxed line-clamp-3">{args.content}</div>}
     </div>

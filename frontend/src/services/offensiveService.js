@@ -53,6 +53,11 @@ export const stopScan = async (scanId) => {
     return response.data;
 };
 
+export const finishScan = async (scanId) => {
+    const response = await offensiveAPI.post(`/scans/${scanId}/finish`);
+    return response.data;
+};
+
 export const getScanReport = async (scanId) => {
     const response = await offensiveAPI.get(`/scans/${scanId}/report`);
     return response.data;
@@ -146,6 +151,7 @@ export default {
     listScans,
     getScan,
     stopScan,
+    finishScan,
     listVulnerabilities,
     getVulnerability,
     createMethodology,

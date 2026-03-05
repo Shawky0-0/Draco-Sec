@@ -139,16 +139,17 @@ class PhishingService:
             status = result.get('status', '')
             
             # Logic: Status represents the *latest* state.
-            if status in ['Email Sent', 'Email Opened', 'Clicked Link', 'Submitted Data']:
+            status_lower = status.lower()
+            if status_lower in ['email sent', 'email opened', 'clicked link', 'submitted data']:
                 stats['sent'] += 1
             
-            if status in ['Email Opened', 'Clicked Link', 'Submitted Data']:
+            if status_lower in ['email opened', 'clicked link', 'submitted data']:
                 stats['opened'] += 1
 
-            if status in ['Clicked Link', 'Submitted Data']:
+            if status_lower in ['clicked link', 'submitted data']:
                 stats['clicked'] += 1
                 
-            if status == 'Submitted Data':
+            if status_lower == 'submitted data':
                 stats['submitted'] += 1
                 
             if status == 'Error':
@@ -188,7 +189,7 @@ class PhishingService:
         try:
             campaigns = self.get_campaigns()
             total_campaigns = len(campaigns)
-            active_campaigns = len([c for c in campaigns if c.get('status') == 'In Progress'])
+            active_campaigns = len([c for c in campaigns if c.get('status', '').lower() == 'in progress'])
             
             # Safely sum up stats
             emails_sent = sum([c.get('stats', {}).get('sent', 0) if c.get('stats') else 0 for c in campaigns])
@@ -204,7 +205,11 @@ class PhishingService:
                 "clicked": clicked,
                 "opened": opened,
                 "submitted": submitted,
-                "error": error
+                "error": error,
+                # Compatibility keys for main dashboard
+                "total_emails_sent": emails_sent,
+                "total_clicks": clicked,
+                "total_compromised": submitted
             }
         except Exception as e:
             print(f"ERROR computing stats: {e}")
@@ -276,27 +281,10 @@ class PhishingService:
         return self._delete(f"/campaigns/{campaign_id}/")
 
     def complete_campaign(self, campaign_id: int) -> Dict[str, Any]:
-        """Mark campaign as completed in GoPhish"""
+        """Mark campaign as completed in GoPhish using the correct endpoint"""
         try:
-            # GoPhish requires specific simplified structure for updates
-            campaign = self._get(f"/campaigns/{campaign_id}/")
-            
-            # Construct minimal payload that GoPhish accepts
-            update_data = {
-                'name': campaign.get('name'),
-                'status': 'Completed',
-                'url': campaign.get('url'),
-                # GoPhish expects only names for related objects during update
-                'template': {'name': campaign['template']['name']} if campaign.get('template') else None,
-                'page': {'name': campaign['page']['name']} if campaign.get('page') else None,
-                'smtp': {'name': campaign['smtp']['name']} if campaign.get('smtp') else None,
-                'groups': [{'name': g['name']} for g in campaign.get('groups', [])]
-            }
-            
-            # Remove None values
-            update_data = {k: v for k, v in update_data.items() if v is not None}
-            
-            return self._put(f"/campaigns/{campaign_id}/", update_data)
+            # GoPhish uses a specific GET endpoint for completion
+            return self._get(f"/campaigns/{campaign_id}/complete")
         except Exception as e:
             print(f"Error completing campaign: {e}")
             raise e

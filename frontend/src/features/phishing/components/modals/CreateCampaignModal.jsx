@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../../../../components/ui/Modal';
 
 import { phishingService } from '../../../../services/phishingService';
-import { Rocket, AlertCircle, Link, Calendar, Users, Mail, Globe, Server, HelpCircle } from 'lucide-react';
+import { Rocket, AlertCircle, Link, Calendar, Users, Mail, Globe, Server, HelpCircle, Loader2 } from 'lucide-react';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -215,7 +215,7 @@ export const CreateCampaignModal = ({ isOpen, onClose, onSuccess }) => {
             `}</style>
             {fetchingData ? (
                 <div className="flex items-center justify-center p-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+                    <Loader2 className="animate-spin text-emerald-500" size={32} />
                 </div>
             ) : (
                 <form id="campaign-form" onSubmit={handleSubmit} className="flex flex-col gap-4">

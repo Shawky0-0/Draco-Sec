@@ -4,23 +4,24 @@ import { phishingService } from '../../../services/phishingService';
 import {
     ArrowLeft, RefreshCw, Trash2, CheckSquare, Download,
     Send, MousePointer, Activity, AlertTriangle,
-    ChevronDown, ChevronUp, Rocket, Smartphone, Globe
+    ChevronDown, ChevronUp, Rocket, Smartphone, Globe,
+    ExternalLink, XCircle
 } from 'lucide-react';
 
 // StatCard Component (same as PhishingDashboard)
-const StatCard = ({ title, value, icon: Icon, color, subtext }) => (
-    <div className="bg-[#1a1a1a]/60 backdrop-blur-md border border-white/5 p-6 rounded-2xl relative overflow-hidden group hover:border-white/10 transition-all duration-300">
-        <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity duration-300 ${color}`}>
-            <Icon size={64} />
-        </div>
-        <div className="relative z-10 flex flex-col gap-4">
-            <div className={`p-3 rounded-lg w-max ${color} bg-opacity-10`}>
-                <Icon size={24} className={color.replace('text-', '')} />
-            </div>
+const StatCard = ({ title, value, icon: Icon, colorClass, subtext }) => (
+    <div className="bg-[#1a1a1a]/60 border border-white/5 rounded-2xl p-6 relative overflow-hidden group hover:border-white/10 transition-colors">
+        <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full blur-2xl opacity-20 group-hover:opacity-30 transition-opacity ${colorClass.bg}`}></div>
+        <div className="relative z-10 flex justify-between items-start">
             <div>
-                <h3 className="text-gray-400 text-sm font-medium">{title}</h3>
-                <p className="text-3xl font-bold text-white mt-1">{value}</p>
+                <p className="text-gray-400 text-sm font-medium mb-1">{title}</p>
+                <div className="flex items-end gap-3">
+                    <h3 className="text-3xl font-bold text-white tracking-tight">{value}</h3>
+                </div>
                 {subtext && <p className="text-xs text-gray-500 mt-2">{subtext}</p>}
+            </div>
+            <div className={`p-3 rounded-xl border ${colorClass.iconBg} ${colorClass.border}`}>
+                <Icon size={20} className={colorClass.text} />
             </div>
         </div>
     </div>
@@ -46,6 +47,8 @@ export const CampaignDashboard = () => {
     const [error, setError] = useState(null);
     const [expandedRow, setExpandedRow] = useState(null);
     const [expandedTimelineEvents, setExpandedTimelineEvents] = useState({});
+    const [isCompleting, setIsCompleting] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
 
     const loadCampaign = async () => {
         setLoading(true);
@@ -75,6 +78,20 @@ export const CampaignDashboard = () => {
         }));
     };
 
+    const handleComplete = async () => {
+        setShowConfirm(false);
+        setIsCompleting(true);
+        try {
+            await phishingService.completeCampaign(id);
+            await loadCampaign(); // Refresh data
+        } catch (err) {
+            console.error(err);
+            alert("Failed to complete campaign: " + err.message);
+        } finally {
+            setIsCompleting(false);
+        }
+    };
+
     const getTimelineForEmail = (email) => {
         if (!campaign?.timeline) return [];
         return campaign.timeline.filter(e => e.email === email || e.message === 'Campaign Created');
@@ -85,6 +102,8 @@ export const CampaignDashboard = () => {
     if (!campaign) return null;
 
     const stats = campaign.stats || { sent: 0, opened: 0, clicked: 0, submitted: 0, error: 0 };
+    const campaignStatus = campaign.status?.toLowerCase() || '';
+    const isCampaignInProgress = campaignStatus === 'in progress' || campaignStatus === 'queued';
 
     return (
         <div className="flex flex-col gap-8 p-8 max-w-[1600px] mx-auto relative">
@@ -98,16 +117,36 @@ export const CampaignDashboard = () => {
                                 <ArrowLeft size={20} />
                             </button>
                             <h2 className="text-3xl font-bold text-white">Results for {campaign.name}</h2>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
+                                ${isCampaignInProgress ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-gray-500/20 text-gray-400 border border-white/10'}
+                            `}>
+                                {campaign.status}
+                            </span>
                         </div>
                         <p className="text-gray-400">Campaign ID: {campaign.id} • Created {new Date(campaign.created_date).toLocaleDateString()}</p>
                     </div>
-                </div>
+                    <div className="flex items-center gap-2 bg-[#1a1a1a]/60 backdrop-blur-md border border-white/5 p-1.5 rounded-xl w-max">
+                        <button
+                            onClick={loadCampaign}
+                            className="flex items-center gap-2 px-4 py-2 hover:bg-white/5 rounded-lg text-gray-400 hover:text-white transition-colors"
+                        >
+                            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Refresh
+                        </button>
 
-                {/* Toolbar */}
-                <div className="flex items-center gap-3 bg-[#1a1a1a]/60 backdrop-blur-md border border-white/5 p-2 rounded-xl w-max">
-                    <button onClick={loadCampaign} className="flex items-center gap-2 px-4 py-2 hover:bg-white/5 rounded-lg text-blue-400 transition-colors">
-                        <RefreshCw size={16} /> Refresh
-                    </button>
+                        {isCampaignInProgress && (
+                            <>
+                                <div className="w-px h-6 bg-white/10 mx-1"></div>
+                                <button
+                                    onClick={() => setShowConfirm(true)}
+                                    disabled={isCompleting}
+                                    className="flex items-center gap-2 px-4 py-2 hover:bg-emerald-500/10 rounded-lg text-emerald-400 font-medium transition-all group"
+                                >
+                                    <CheckSquare size={16} className={`${isCompleting ? 'animate-spin' : ''}`} />
+                                    {isCompleting ? 'Completing...' : 'Complete'}
+                                </button>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -117,28 +156,28 @@ export const CampaignDashboard = () => {
                     title="Email Sent"
                     value={stats.sent}
                     icon={Send}
-                    color="text-emerald-400"
+                    colorClass={{ bg: 'bg-emerald-500', iconBg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' }}
                     subtext="Successfully delivered"
                 />
                 <StatCard
                     title="Email Opened"
                     value={stats.opened}
                     icon={Activity}
-                    color="text-yellow-400"
+                    colorClass={{ bg: 'bg-yellow-500', iconBg: 'bg-yellow-500/10', border: 'border-yellow-500/20', text: 'text-yellow-400' }}
                     subtext="Recipients engaged"
                 />
                 <StatCard
                     title="Clicked Link"
                     value={stats.clicked}
                     icon={MousePointer}
-                    color="text-amber-400"
+                    colorClass={{ bg: 'bg-amber-500', iconBg: 'bg-amber-500/10', border: 'border-amber-500/20', text: 'text-amber-400' }}
                     subtext="Link clicks recorded"
                 />
                 <StatCard
                     title="Submitted Data"
                     value={stats.submitted}
                     icon={AlertTriangle}
-                    color="text-red-400"
+                    colorClass={{ bg: 'bg-rose-500', iconBg: 'bg-rose-500/10', border: 'border-rose-500/20', text: 'text-rose-400' }}
                     subtext="Credentials submitted"
                 />
             </div>
@@ -321,6 +360,44 @@ export const CampaignDashboard = () => {
                     </table>
                 </div>
             </div>
+
+            {/* Premium Confirmation Modal */}
+            {showConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl p-8 max-w-md w-full shadow-2xl relative overflow-hidden group">
+                        {/* Background Glow */}
+                        <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl group-hover:bg-emerald-500/20 transition-colors duration-500"></div>
+
+                        <div className="relative z-10">
+                            <div className="flex items-center gap-4 mb-6">
+                                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
+                                    <AlertTriangle className="text-emerald-400" size={24} />
+                                </div>
+                                <h3 className="text-xl font-bold text-white">Stop Simulation?</h3>
+                            </div>
+
+                            <p className="text-gray-400 mb-8 leading-relaxed">
+                                Are you sure you want to mark this campaign as complete? This will <span className="text-white font-semibold">stop all remaining email sending</span> and finalize the results.
+                            </p>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowConfirm(false)}
+                                    className="flex-1 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white font-medium transition-all border border-white/5"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleComplete}
+                                    className="flex-1 px-6 py-3 rounded-xl bg-emerald-500 text-black font-bold hover:bg-emerald-400 transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)]"
+                                >
+                                    Yes, Stop Now
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

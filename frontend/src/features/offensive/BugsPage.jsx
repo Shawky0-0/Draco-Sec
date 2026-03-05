@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Bug, Search, X, ChevronRight, ChevronDown,
     Calendar, Hash, Shield, AlertTriangle,
-    FileCode, Cpu, Target, ArrowLeft, Filter
+    FileCode, Cpu, Target, ArrowLeft, Filter, Loader2
 } from 'lucide-react';
 import { listVulnerabilities } from '../../services/offensiveService';
 
@@ -25,7 +25,7 @@ const fmtDate = (d) => d ? new Date(d).toLocaleDateString(undefined, { dateStyle
 const fmtTime = (d) => d ? new Date(d).toLocaleTimeString(undefined, { timeStyle: 'medium' }) : '—';
 
 /* ──────────────────────────────────────────────────────
-   Markdown content renderer (renders Strix vuln reports)
+   Markdown content renderer (renders Draco vuln reports)
 ────────────────────────────────────────────────────── */
 const MarkdownContent = ({ text }) => {
     if (!text) return null;
@@ -143,7 +143,7 @@ const BugsPage = () => {
 
     if (loading) return (
         <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600" />
+            <Loader2 className="animate-spin text-gray-500" size={32} />
         </div>
     );
 
@@ -270,7 +270,7 @@ const VulnRow = ({ vuln, idx, onClick }) => {
 const VulnDetailView = ({ vuln, onBack }) => {
     const cfg = getSev(vuln.severity);
 
-    // Parse Strix report ID from poc field
+    // Parse Draco report ID from poc field
     const reportId = vuln.poc; // e.g. "vuln-0001"
 
     return (
@@ -291,7 +291,7 @@ const VulnDetailView = ({ vuln, onBack }) => {
                         <div className="flex items-center gap-2 mb-3 flex-wrap">
                             <span className={`text-xs font-bold uppercase px-2.5 py-1 rounded-lg ${cfg.badge}`}>{vuln.severity}</span>
                             <span className="text-xs bg-gray-800/80 text-gray-400 px-2 py-1 rounded-lg font-mono border border-gray-700">
-                                🤖 Automated Finding by Strix
+                                🤖 Automated Finding by Draco
                             </span>
                             {reportId && (
                                 <span className="text-xs bg-black/40 text-gray-500 px-2 py-1 rounded-lg font-mono border border-gray-800">
@@ -313,7 +313,7 @@ const VulnDetailView = ({ vuln, onBack }) => {
             <div className="bg-[#0a0a0a] border border-gray-800 rounded-2xl overflow-hidden">
                 <div className="px-5 py-3 border-b border-gray-800 bg-gray-900/40 flex items-center gap-2">
                     <Bug size={14} className="text-gray-500" />
-                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Strix Analysis Report</span>
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Draco Analysis Report</span>
                 </div>
                 <div className="p-6">
                     {vuln.content ? (

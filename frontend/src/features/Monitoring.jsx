@@ -38,6 +38,7 @@ const MonitoringPage = () => {
     const [filterSeverity, setFilterSeverity] = useState(null);
     const [lastAlertCount, setLastAlertCount] = useState(0);
     const [blockedIps, setBlockedIps] = useState([]);
+    const [searchTerm, setSearchTerm] = useState('');
     const [toast, setToast] = useState(null);
 
     const showToast = (message, type = 'success') => {
@@ -172,12 +173,45 @@ const MonitoringPage = () => {
     };
 
     const filteredAlerts = alerts.filter(alert => {
-        if (activeQueue === 'all') return true;
-        if (activeQueue === 'critical') return alert.severity === 1;
-        if (activeQueue === 'high') return alert.severity === 2;
-        if (activeQueue === 'medium') return alert.severity === 3;
-        if (activeQueue === 'low') return alert.severity === 4;
-        return true;
+        // Severity filter
+        const matchesSeverity = activeQueue === 'all' ||
+            (activeQueue === 'critical' && alert.severity === 1) ||
+            (activeQueue === 'high' && alert.severity === 2) ||
+            (activeQueue === 'medium' && alert.severity === 3) ||
+            (activeQueue === 'low' && alert.severity === 4);
+
+        if (!matchesSeverity) return false;
+
+        // Search filter
+        if (!searchTerm) return true;
+
+        const s = searchTerm.toLowerCase();
+        return (
+            (alert.signature && alert.signature.toLowerCase().includes(s)) ||
+            (alert.src_ip && alert.src_ip.toLowerCase().includes(s)) ||
+            (alert.dest_ip && alert.dest_ip.toLowerCase().includes(s)) ||
+            (alert.protocol && alert.protocol.toLowerCase().includes(s)) ||
+            (alert.category && alert.category.toLowerCase().includes(s))
+        );
+    });
+
+    const filteredBlockedIps = blockedIps.filter(block => {
+        if (!searchTerm) return true;
+        const s = searchTerm.toLowerCase();
+        return (
+            (block.ip && block.ip.toLowerCase().includes(s)) ||
+            (block.reason && block.reason.toLowerCase().includes(s))
+        );
+    });
+
+    const filteredDevices = devices.filter(device => {
+        if (!searchTerm) return true;
+        const s = searchTerm.toLowerCase();
+        return (
+            (device.hostname && device.hostname.toLowerCase().includes(s)) ||
+            (device.ip_address && device.ip_address.toLowerCase().includes(s)) ||
+            (device.vendor && device.vendor.toLowerCase().includes(s))
+        );
     });
 
     const formatSignature = (sig) => {
@@ -213,18 +247,22 @@ const MonitoringPage = () => {
                 {/* Unified Table Header - Contextual */}
                 <div className="p-4 border-b border-white/5 flex justify-between items-center shrink-0">
                     <div className="flex items-center gap-4">
-                        <div className="flex bg-white/5 p-1 rounded-lg border border-white/10">
+                        <div className="bg-[#0a0a0a]/40 p-1.5 rounded-xl border border-white/5 flex gap-1 w-max">
                             <button
                                 onClick={() => setActiveTab('alerts')}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'alerts' ? 'bg-white/10 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'alerts'
+                                    ? 'bg-[#1a1a1a] text-white shadow-[0_0_15px_rgba(0,255,170,0.05)] border border-white/10'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                             >
-                                <Shield size={14} /> Alerts
+                                <Shield size={14} className={activeTab === 'alerts' ? 'text-emerald-400' : ''} /> Alerts
                             </button>
                             <button
                                 onClick={() => setActiveTab('devices')}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'devices' ? 'bg-emerald-500/20 text-emerald-400' : 'text-gray-400 hover:text-white'}`}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'devices'
+                                    ? 'bg-[#1a1a1a] text-white shadow-[0_0_15px_rgba(0,255,170,0.05)] border border-white/10'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                             >
-                                <Network size={14} /> Devices
+                                <Network size={14} className={activeTab === 'devices' ? 'text-emerald-400' : ''} /> Devices
                             </button>
                         </div>
                     </div>
@@ -235,13 +273,15 @@ const MonitoringPage = () => {
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
                             <input
                                 type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
                                 placeholder="Search events..."
                                 className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-4 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-white/20 transition-colors"
                             />
                         </div>
 
                         <div className="text-sm text-gray-400">
-                            {activeTab === 'alerts' ? `${filteredAlerts.length + blockedIps.length} events` : `${devices.length} devices`}
+                            {activeTab === 'alerts' ? `${filteredAlerts.length + filteredBlockedIps.length} events` : `${filteredDevices.length} devices`}
                         </div>
                     </div>
                 </div>
@@ -253,14 +293,14 @@ const MonitoringPage = () => {
                         <div className="px-4 py-2 border-b border-white/5 flex items-center gap-3 bg-white/[0.02]">
                             <div className="flex items-center gap-2">
                                 <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Severity:</span>
-                                <div className="flex bg-white/5 rounded-lg p-1">
+                                <div className="bg-[#0a0a0a]/40 p-1 rounded-xl border border-white/5 flex gap-1 w-max">
                                     {['all', 'critical', 'high', 'medium', 'low'].map(severity => (
                                         <button
                                             key={severity}
                                             onClick={() => setActiveQueue(severity)}
-                                            className={`px-3 py-1 rounded text-xs font-medium capitalize transition-all ${activeQueue === severity
-                                                ? 'bg-white/10 text-white shadow-sm'
-                                                : 'text-gray-400 hover:text-white'
+                                            className={`px-3 py-1 rounded-lg text-xs font-medium capitalize transition-all duration-300 ${activeQueue === severity
+                                                ? 'bg-[#1a1a1a] text-white border border-white/10'
+                                                : 'text-gray-400 hover:text-white hover:bg-white/5'
                                                 }`}
                                         >
                                             {severity}
@@ -273,7 +313,7 @@ const MonitoringPage = () => {
                         {/* Helper Function for Table Body */}
                         <div className="overflow-auto flex-1">
                             <table className="w-full text-left">
-                                <thead className="bg-white/5 text-xs uppercase font-medium text-gray-300 sticky top-0 z-10 backdrop-blur-sm">
+                                <thead className="bg-white/5 text-xs uppercase font-medium text-gray-400 sticky top-0 z-10 backdrop-blur-sm tracking-wider">
                                     <tr>
                                         <th className="px-4 py-3">Time</th>
                                         <th className="px-4 py-3">Severity</th>
@@ -295,7 +335,7 @@ const MonitoringPage = () => {
                                             sortTime: new Date(a.timestamp).getTime()
                                         }));
 
-                                        const normalizedBlocks = blockedIps
+                                        const normalizedBlocks = filteredBlockedIps
                                             .filter(b => {
                                                 if (activeQueue === 'all') return true;
                                                 if (activeQueue === 'critical') return true;
@@ -453,12 +493,12 @@ const MonitoringPage = () => {
                         </div>
                         <div className="overflow-auto flex-1 p-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                {devices.length === 0 ? (
+                                {filteredDevices.length === 0 ? (
                                     <div className="col-span-full py-12 text-center text-gray-500">
-                                        No devices discovered yet. Click "Scan Network" to begin.
+                                        {searchTerm ? `No devices matching "${searchTerm}"` : 'No devices discovered yet. Click "Scan Network" to begin.'}
                                     </div>
                                 ) : (
-                                    devices.map(device => (
+                                    filteredDevices.map(device => (
                                         <div key={device.id} className="bg-[#1a1a1a]/40 border border-white/5 rounded-xl p-4 hover:border-emerald-500/30 hover:bg-[#1a1a1a]/80 transition-all flex flex-col gap-3 group relative overflow-hidden">
                                             {/* Status indicator line */}
                                             <div className={`absolute top-0 left-0 w-full h-1 ${device.is_active ? 'bg-emerald-500/50' : 'bg-gray-600/50'}`}></div>

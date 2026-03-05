@@ -324,6 +324,33 @@ async def stop_scan(
     return {"message": "Scan stopped successfully"}
 
 
+@router.post("/scans/{scan_id}/finish")
+async def finish_scan_with_report(
+    scan_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Graceful finish: generate a report from all findings discovered so far,
+    mark the scan as completed, then stop the agent. 
+    Use this instead of Stop when you want a final report immediately.
+    """
+    scan = db.query(OffensiveScan).filter(
+        OffensiveScan.id == scan_id,
+        OffensiveScan.user_id == current_user.id
+    ).first()
+
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    result = await strix_service.graceful_finish_scan(scan_id, db)
+
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error"))
+
+    return result
+
+
 @router.get("/scans/{scan_id}/feed")
 async def get_agent_feed(
     scan_id: int,
@@ -492,16 +519,13 @@ def get_analytics(
     total_medium = sum(s.medium_count for s in scans)
     total_low = sum(s.low_count for s in scans)
     
-    # Vulnerability by type
-    user_scan_ids = [s.id for s in scans]
-    vulns = db.query(Vulnerability).filter(
-        Vulnerability.scan_id.in_(user_scan_ids)
-    ).all() if user_scan_ids else []
-    
-    vuln_by_type = {}
-    for vuln in vulns:
-        vuln_type = vuln.vulnerability_type
-        vuln_by_type[vuln_type] = vuln_by_type.get(vuln_type, 0) + 1
+    # Top vulnerable targets
+    target_vulns = {}
+    for s in scans:
+        if s.vulnerabilities_found > 0:
+            target_vulns[s.target] = target_vulns.get(s.target, 0) + s.vulnerabilities_found
+            
+    top_targets = dict(sorted(target_vulns.items(), key=lambda item: item[1], reverse=True)[:5])
     
     return {
         "total_scans": total_scans,
@@ -512,7 +536,7 @@ def get_analytics(
             "medium": total_medium,
             "low": total_low
         },
-        "by_type": vuln_by_type,
+        "top_targets": top_targets,
         "recent_scans": [
             {
                 "id": s.id,

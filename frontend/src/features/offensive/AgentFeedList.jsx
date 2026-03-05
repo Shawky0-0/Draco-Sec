@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Activity, ArrowRight, Clock } from 'lucide-react';
+import { Activity, ArrowRight, Clock, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { listScans } from '../../services/offensiveService';
 
@@ -29,7 +29,7 @@ const AgentFeedList = () => {
     if (loading) {
         return (
             <div className="flex items-center justify-center h-screen bg-black">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-600"></div>
+                <Loader2 className="animate-spin text-gray-500" size={48} />
             </div>
         );
     }

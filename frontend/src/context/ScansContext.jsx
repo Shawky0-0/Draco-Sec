@@ -81,6 +81,8 @@ export const ScansProvider = ({ children }) => {
                     const uniqueId = `${scanId}-${Date.now()}`;
                     return [{
                         id: uniqueId,
+                        type: activeScan?.type || 'url',
+                        target: activeScan?.target || 'Unknown Target',
                         result: attributes,
                         completedAt: new Date().toISOString()
                     }, ...prev.slice(0, 9)];

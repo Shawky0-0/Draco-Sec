@@ -3,12 +3,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Send, Plus, X, Trash2, Brain, Terminal, Shield, Sword, Menu, Copy, Edit2, Check, Square } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import API_BASE_URL from '../../config/api';
+import DOMPurify from 'dompurify';
 
 // --- Markdown Formatter ---
 const FormatMessage = ({ content }) => {
     const formatText = (text) => {
         if (!text) return '';
         let formatted = text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/```([\s\S]*?)```/g, '<div class="bg-white/5 p-4 rounded-lg my-3 overflow-x-auto font-mono text-sm text-green-400 border border-white/10"><pre>$1</pre></div>')
             .replace(/`([^`]+)`/g, '<code class="bg-white/10 px-1.5 py-0.5 rounded font-mono text-sm text-blue-300">$1</code>')
@@ -17,7 +21,7 @@ const FormatMessage = ({ content }) => {
             .replace(/\n/g, '<br />');
         return formatted;
     };
-    return <div dangerouslySetInnerHTML={{ __html: formatText(content) }} className="prose prose-invert max-w-none text-[0.95rem] leading-[1.7] text-white/90" />;
+    return <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(formatText(content)) }} className="prose prose-invert max-w-none text-[0.95rem] leading-[1.7] text-white/90" />;
 };
 
 export const DracoAIPage = () => {
